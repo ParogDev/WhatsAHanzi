@@ -1,0 +1,11 @@
+package-as: WhatsAHanzi
+
+ignore:
+  - tests
+  - .github
+  - .luacheckrc
+  - .stylua.toml
+  - .busted
+  - CHANGELOG.md
+
+# externals: none yet (LibStub/Ace3 would go here)

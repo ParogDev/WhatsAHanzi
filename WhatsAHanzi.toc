@@ -1,0 +1,21 @@
+## Interface: 16001
+## Title: Whats A Hanzi
+## Notes: Chinese chat with pinyin and word glosses, so you learn while you play.
+## Author: ParogDev
+## Version: @project-version@
+## SavedVariables: WhatsAHanziDB
+## X-Game: forever
+## X-Website: https://github.com/ParogDev/WhatsAHanzi
+## X-License: MIT (code); CC-BY-SA 4.0 (CC-CEDICT data); Unicode licence (Unihan data)
+## IconTexture: Interface\Icons\INV_Misc_Book_09
+
+Han.lua
+Data\Pinyin.lua
+Data\Dict.lua
+Data\Inbox.lua
+Pinyin.lua
+Dict.lua
+Font.lua
+UI.lua
+Chat.lua
+Core.lua
