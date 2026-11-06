@@ -59,26 +59,99 @@ local function createFrame()
 		end
 	end)
 	msg:SetScript("OnHyperlinkLeave", function()
-		GameTooltip:Hide()
+		UI.hideGloss()
 	end)
 	f.msg = msg
-	ns.Font.apply(msg, 14)
+	UI.applyFontSize(msg)
 	return f
+end
+
+UI.DEFAULT_FONT_SIZE = 22
+
+-- Sets the pane's font at the configured size: the CJK-capable font when one was found, else the chat
+-- font's file. Both are plain SetFont calls on the message frame (a FontInstance), never on a font object.
+function UI.applyFontSize(msg)
+	local size = (ns.db and ns.db.ui and ns.db.ui.fontSize) or UI.DEFAULT_FONT_SIZE
+	if not ns.Font.apply(msg, size) then
+		local path = ChatFontNormal and ChatFontNormal.GetFont and ChatFontNormal:GetFont()
+		if path then
+			msg:SetFont(path, size, "")
+		end
+	end
+end
+
+-- /hanzi size N (10..48). Persists and applies at once.
+function UI.setFontSize(n)
+	n = tonumber(n)
+	if not n or n < 10 or n > 48 then
+		return false
+	end
+	ns.db.ui.fontSize = n
+	local f = UI.get()
+	UI.applyFontSize(f.msg)
+	return true
+end
+
+-- Our own gloss popup instead of GameTooltip: the tooltip's font has no pinyin tone letters, and setting
+-- fonts on GameTooltip's shared lines would leak into every other tooltip.
+local gloss
+local function glossFrame()
+	if gloss then
+		return gloss
+	end
+	gloss = CreateFrame("Frame", ADDON .. "Gloss", UIParent, "BackdropTemplate")
+	gloss:SetFrameStrata("TOOLTIP")
+	gloss:SetClampedToScreen(true)
+	if gloss.SetBackdrop then
+		gloss:SetBackdrop({
+			bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
+			edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
+			tile = true,
+			tileSize = 16,
+			edgeSize = 12,
+			insets = { left = 3, right = 3, top = 3, bottom = 3 },
+		})
+		gloss:SetBackdropColor(0.05, 0.05, 0.1, 0.95)
+	end
+	gloss.word = gloss:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+	gloss.word:SetPoint("TOPLEFT", 10, -8)
+	gloss.pinyin = gloss:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+	gloss.pinyin:SetPoint("TOPLEFT", gloss.word, "BOTTOMLEFT", 0, -4)
+	gloss.meaning = gloss:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+	gloss.meaning:SetPoint("TOPLEFT", gloss.pinyin, "BOTTOMLEFT", 0, -4)
+	gloss.meaning:SetWidth(300)
+	gloss.meaning:SetJustifyH("LEFT")
+	gloss.meaning:SetWordWrap(true)
+	gloss:Hide()
+	return gloss
 end
 
 function UI.showGloss(anchor, word)
 	local e = ns.Data and ns.Data.dict and ns.Data.dict[word]
-	GameTooltip:SetOwner(anchor, "ANCHOR_CURSOR")
-	GameTooltip:ClearLines()
-	GameTooltip:AddLine(word, 1, 1, 1)
+	local g = glossFrame()
+	local size = (ns.db.ui.fontSize or UI.DEFAULT_FONT_SIZE)
+	ns.Font.apply(g.word, size + 6)
+	ns.Font.apply(g.pinyin, size)
+	ns.Font.apply(g.meaning, math.max(12, size - 4))
+	g.word:SetText(word)
 	if e then
-		GameTooltip:AddLine(e[1], 0.6, 0.9, 1)
-		GameTooltip:AddLine(e[2], 0.9, 0.9, 0.9, true)
+		g.pinyin:SetText("|cff99ccff" .. e[1] .. "|r")
+		g.meaning:SetText(e[2])
 	else
-		GameTooltip:AddLine(ns.Pinyin.string(word), 0.6, 0.9, 1)
-		GameTooltip:AddLine("(no dictionary entry)", 0.6, 0.6, 0.6)
+		g.pinyin:SetText("|cff99ccff" .. ns.Pinyin.string(word) .. "|r")
+		g.meaning:SetText("|cff888888(no dictionary entry)|r")
 	end
-	GameTooltip:Show()
+	local w = math.max(g.word:GetStringWidth(), g.pinyin:GetStringWidth(), math.min(300, g.meaning:GetStringWidth()))
+	g:SetSize(w + 20, g.word:GetStringHeight() + g.pinyin:GetStringHeight() + g.meaning:GetStringHeight() + 24)
+	g:ClearAllPoints()
+	g:SetPoint("BOTTOMLEFT", anchor, "TOPLEFT", 0, 4)
+	g:Show()
+end
+
+function UI.hideGloss()
+	if gloss then
+		gloss:Hide()
+	end
 end
 
 function UI.get()

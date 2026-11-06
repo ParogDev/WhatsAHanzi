@@ -4,8 +4,10 @@ local ADDON, ns = ...
 local Font = {}
 ns.Font = Font
 
+-- The bundled font first: it is the only one with both the Han characters and the pinyin tone letters
+-- (ǎ ǐ ǒ ǔ ǚ); Blizzard's ARKai_T has the Han but not the tone letters.
 local CANDIDATES = {
-	"Interface\\AddOns\\" .. ADDON .. "\\Fonts\\NotoSansCJKsc-Regular.ttf",
+	"Interface\\AddOns\\" .. ADDON .. "\\Fonts\\NotoSansSC-Regular.ttf",
 	"Fonts\\ARKai_T.ttf",
 	"Fonts\\ARHei.ttf",
 }

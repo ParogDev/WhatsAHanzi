@@ -8,7 +8,7 @@ local DB_VERSION = 1
 local defaults = {
 	dbVersion = DB_VERSION,
 	channels = {}, -- event -> false to disable; absent = on
-	ui = { hidden = false, point = nil },
+	ui = { hidden = false, point = nil, fontSize = 22 },
 	vocab = {},
 	selftest = {},
 }
@@ -46,6 +46,15 @@ function ns.initDB(saved)
 	return saved
 end
 
+-- The TOC version; "dev" while the packager's @project-version@ placeholder is unreplaced (a linked checkout).
+function ns.version()
+	local v = C_AddOns and C_AddOns.GetAddOnMetadata and C_AddOns.GetAddOnMetadata(ADDON, "Version")
+	if not v or v:sub(1, 1) == "@" then
+		return "dev"
+	end
+	return v
+end
+
 -- Selftest: what the verify loop reads back after a /reload. Never contains secret values.
 local selftest = { counters = { lines = 0, secret = 0, chinese = 0, words = 0 }, lastLines = {} }
 ns.selftest = selftest
@@ -61,7 +70,7 @@ end
 function selftest.snapshot(phase)
 	local version, build, _, interface = GetBuildInfo()
 	local s = {
-		version = C_AddOns and C_AddOns.GetAddOnMetadata and C_AddOns.GetAddOnMetadata(ADDON, "Version") or "?",
+		version = ns.version(),
 		clientVersion = version,
 		build = build,
 		interface = interface,
@@ -97,7 +106,7 @@ local function onSlash(input)
 		local c = selftest.counters
 		print(
 			("v%s: %d lines, %d chinese, %d secret, %d words; dict %d, pinyin %d, font %s"):format(
-				tostring(C_AddOns.GetAddOnMetadata(ADDON, "Version")),
+				ns.version(),
 				c.lines,
 				c.chinese,
 				c.secret,
@@ -107,6 +116,12 @@ local function onSlash(input)
 				tostring(ns.Font.probe and ns.Font.probe.path)
 			)
 		)
+	elseif cmd == "size" then
+		if ns.UI.setFontSize(rest) then
+			print("font size " .. ns.db.ui.fontSize)
+		else
+			print("/hanzi size <10-48> (now " .. tostring(ns.db.ui.fontSize or ns.UI.DEFAULT_FONT_SIZE) .. ")")
+		end
 	elseif cmd == "vocab" then
 		local n = 0
 		for _ in pairs(ns.db.vocab) do
@@ -120,7 +135,7 @@ local function onSlash(input)
 		f:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT", 30, 260)
 		f:Show()
 	else
-		print("/hanzi  toggle | test <chinese text> | status | vocab | reset")
+		print("/hanzi  toggle | test <chinese text> | size <10-48> | status | vocab | reset")
 	end
 end
 
