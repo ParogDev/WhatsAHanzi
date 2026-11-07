@@ -76,6 +76,118 @@ function Chat.register(frame)
 	end
 end
 
+-- In the normal chat window: a message filter wraps each Chinese word in an addon hyperlink
+-- (|Haddon:WhatsAHanzi:<word>|h<word>|h, no colour code, so the line keeps its chat colour), and hovering
+-- one shows the gloss popup at the cursor. Escapes already in the line (item and player links, textures,
+-- atlases, Battle.net names) are copied untouched. Blizzard skips filters for secret text (canaccessvalue
+-- in ChatFrameFilters.lua); the guard here is the second line of defence.
+Chat.LINK_PREFIX = "addon:WhatsAHanzi:"
+local ESCAPES = { "|H.-|h.-|h", "|T.-|t", "|A.-|a", "|K.-|k" }
+
+local function linkPlain(out, s)
+	if s == "" then
+		return
+	end
+	if not ns.Han.hasHan(s) then
+		out[#out + 1] = s
+		return
+	end
+	for _, t in ipairs(ns.Dict.segment(s)) do
+		if t.han then
+			out[#out + 1] = "|H" .. Chat.LINK_PREFIX .. t.word .. "|h" .. t.word .. "|h"
+		else
+			out[#out + 1] = t.word
+		end
+	end
+end
+
+-- Returns the line with every Han word linked, or nil when there is nothing to do (secret, no Han).
+function Chat.linkify(text)
+	if type(text) ~= "string" or isSecret(text) or not ns.Han.hasHan(text) then
+		return nil
+	end
+	local out, pos = {}, 1
+	while pos <= #text do
+		local s, e
+		for _, p in ipairs(ESCAPES) do
+			local ps, pe = text:find(p, pos)
+			if ps and (not s or ps < s) then
+				s, e = ps, pe
+			end
+		end
+		if not s then
+			break
+		end
+		linkPlain(out, text:sub(pos, s - 1))
+		out[#out + 1] = text:sub(s, e)
+		pos = e + 1
+	end
+	linkPlain(out, text:sub(pos))
+	return table.concat(out)
+end
+
+-- The same line reaches the filter once per chat frame that shows it: keep the last result.
+local lastIn, lastOut
+function Chat.chatFilter(_, _, text, ...)
+	if ns.db and ns.db.ui.inChat == false then
+		return false
+	end
+	if isSecret(text) then
+		return false
+	end
+	if text ~= lastIn then
+		lastIn, lastOut = text, Chat.linkify(text)
+		if lastOut then
+			ns.selftest.counters.linked = (ns.selftest.counters.linked or 0) + 1
+		end
+	end
+	if not lastOut then
+		return false
+	end
+	return false, lastOut, ...
+end
+
+-- Word from one of our links, or nil for any other link.
+function Chat.wordFromLink(link)
+	if type(link) ~= "string" or link:sub(1, #Chat.LINK_PREFIX) ~= Chat.LINK_PREFIX then
+		return nil
+	end
+	local word = link:sub(#Chat.LINK_PREFIX + 1)
+	return word ~= "" and word or nil
+end
+
+-- Hooks the chat window: the filter per event and the hover callbacks. Records in selftest.chatHook what
+-- took and, when something is missing, which link broke.
+function Chat.hookChatFrames()
+	local hook = { filters = 0 }
+	ns.selftest.chatHook = hook
+	if not (ChatFrameUtil and ChatFrameUtil.AddMessageEventFilter) then
+		hook.error = "ChatFrameUtil.AddMessageEventFilter missing: no words linked in chat"
+		return hook
+	end
+	for _, ev in ipairs(Chat.EVENTS) do
+		ChatFrameUtil.AddMessageEventFilter(ev, Chat.chatFilter)
+		hook.filters = hook.filters + 1
+	end
+	if not (EventRegistry and EventRegistry.RegisterCallback) then
+		hook.error = "EventRegistry missing: words linked but hover shows nothing"
+		return hook
+	end
+	EventRegistry:RegisterCallback("ChatFrame.OnHyperlinkEnter", function(_, _, link)
+		local word = Chat.wordFromLink(link)
+		if word and ns.UI then
+			ns.UI.showGlossAtCursor(word)
+		end
+	end, Chat)
+	EventRegistry:RegisterCallback("ChatFrame.OnHyperlinkLeave", function()
+		if ns.UI then
+			ns.UI.hideGloss()
+		end
+	end, Chat)
+	hook.hover = true
+	return hook
+end
+
 -- Vocabulary log: every known word seen, with counts and who said it (SavedVariable, account-wide).
 local Vocab = {}
 ns.Vocab = Vocab

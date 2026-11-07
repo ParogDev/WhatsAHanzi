@@ -145,8 +145,19 @@ function UI.showGloss(anchor, word)
 	local w = math.max(g.word:GetStringWidth(), g.pinyin:GetStringWidth(), math.min(300, g.meaning:GetStringWidth()))
 	g:SetSize(w + 20, g.word:GetStringHeight() + g.pinyin:GetStringHeight() + g.meaning:GetStringHeight() + 24)
 	g:ClearAllPoints()
-	g:SetPoint("BOTTOMLEFT", anchor, "TOPLEFT", 0, 4)
+	if anchor then
+		g:SetPoint("BOTTOMLEFT", anchor, "TOPLEFT", 0, 4)
+	else
+		-- A word in the chat window: the popup sits just above the cursor.
+		local x, y = GetCursorPosition()
+		local scale = UIParent:GetEffectiveScale()
+		g:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT", x / scale - 10, y / scale + 14)
+	end
 	g:Show()
+end
+
+function UI.showGlossAtCursor(word)
+	UI.showGloss(nil, word)
 end
 
 function UI.hideGloss()
