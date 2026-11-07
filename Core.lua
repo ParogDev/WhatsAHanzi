@@ -8,7 +8,7 @@ local DB_VERSION = 1
 local defaults = {
 	dbVersion = DB_VERSION,
 	channels = {}, -- event -> false to disable; absent = on
-	ui = { hidden = false, point = nil, fontSize = 22 },
+	ui = { hidden = false, point = nil, fontSize = 22, font = nil, tones = "marks" },
 	vocab = {},
 	selftest = {},
 }
@@ -104,8 +104,15 @@ local function onSlash(input)
 		ns.Chat.process("SLASH", rest, "You")
 	elseif cmd == "status" then
 		local c = selftest.counters
+		local path, name = ns.Font.current()
+		local accepted = {}
+		for _, n in ipairs({ "noto", "kai", "hei", "arial", "friz" }) do
+			if ns.Font.probe and ns.Font.probe.byName[n] then
+				accepted[#accepted + 1] = n
+			end
+		end
 		print(
-			("v%s: %d lines, %d chinese, %d secret, %d words; dict %d, pinyin %d, font %s"):format(
+			("v%s: %d lines, %d chinese, %d secret, %d words; dict %d, pinyin %d; tones %s; font %s (%s); accepted: %s"):format(
 				ns.version(),
 				c.lines,
 				c.chinese,
@@ -113,9 +120,27 @@ local function onSlash(input)
 				c.words,
 				ns.Dict.count(),
 				ns.Pinyin.count(),
-				tostring(ns.Font.probe and ns.Font.probe.path)
+				ns.db.ui.tones or "marks",
+				tostring(name),
+				tostring(path),
+				table.concat(accepted, " ")
 			)
 		)
+	elseif cmd == "font" then
+		local ok, why = ns.Font.set(rest)
+		if ok then
+			ns.UI.applyFontSize()
+			print("font " .. rest .. " (" .. ns.Font.NAMED[rest] .. ")")
+		else
+			print("/hanzi font kai | arial | friz | hei | noto" .. (why and rest and (": " .. why) or ""))
+		end
+	elseif cmd == "tones" then
+		if rest == "marks" or rest == "numbers" then
+			ns.db.ui.tones = rest
+			print("tones shown as " .. rest .. " (new lines; " .. ns.Pinyin.display("nǐ hǎo") .. ")")
+		else
+			print("/hanzi tones marks | numbers (now " .. (ns.db.ui.tones or "marks") .. ")")
+		end
 	elseif cmd == "size" then
 		if ns.UI.setFontSize(rest) then
 			print("font size " .. ns.db.ui.fontSize)
@@ -135,7 +160,9 @@ local function onSlash(input)
 		f:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT", 30, 260)
 		f:Show()
 	else
-		print("/hanzi  toggle | test <chinese text> | size <10-48> | status | vocab | reset")
+		print(
+			"/hanzi  toggle | test <chinese text> | size <10-48> | font <name> | tones marks|numbers | status | vocab | reset"
+		)
 	end
 end
 

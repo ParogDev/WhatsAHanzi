@@ -68,9 +68,10 @@ end
 
 UI.DEFAULT_FONT_SIZE = 22
 
--- Sets the pane's font at the configured size: the CJK-capable font when one was found, else the chat
+-- Sets the pane's font at the configured size: the chosen font when the client accepts one, else the chat
 -- font's file. Both are plain SetFont calls on the message frame (a FontInstance), never on a font object.
 function UI.applyFontSize(msg)
+	msg = msg or UI.get().msg
 	local size = (ns.db and ns.db.ui and ns.db.ui.fontSize) or UI.DEFAULT_FONT_SIZE
 	if not ns.Font.apply(msg, size) then
 		local path = ChatFontNormal and ChatFontNormal.GetFont and ChatFontNormal:GetFont()
@@ -135,10 +136,10 @@ function UI.showGloss(anchor, word)
 	ns.Font.apply(g.meaning, math.max(12, size - 4))
 	g.word:SetText(word)
 	if e then
-		g.pinyin:SetText("|cff99ccff" .. e[1] .. "|r")
+		g.pinyin:SetText("|cff99ccff" .. ns.Pinyin.display(e[1]) .. "|r")
 		g.meaning:SetText(e[2])
 	else
-		g.pinyin:SetText("|cff99ccff" .. ns.Pinyin.string(word) .. "|r")
+		g.pinyin:SetText("|cff99ccff" .. ns.Pinyin.display(ns.Pinyin.string(word)) .. "|r")
 		g.meaning:SetText("|cff888888(no dictionary entry)|r")
 	end
 	local w = math.max(g.word:GetStringWidth(), g.pinyin:GetStringWidth(), math.min(300, g.meaning:GetStringWidth()))
@@ -193,7 +194,7 @@ function UI.addAnalysed(sender, tokens, pinyinLine)
 		end
 	end
 	f.msg:AddMessage("|cffffd100" .. (sender or "?") .. ":|r " .. table.concat(parts))
-	f.msg:AddMessage("    |cff99ccff" .. pinyinLine .. "|r")
+	f.msg:AddMessage("    |cff99ccff" .. ns.Pinyin.display(pinyinLine) .. "|r")
 end
 
 -- A line we could not analyse (secret value inside an instance): shown raw with a tag.

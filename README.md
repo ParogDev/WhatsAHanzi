@@ -9,13 +9,15 @@ Only WoW: Forever (interface 16001) is supported.
 - `/hanzi` toggles the pane. Drag it where you like.
 - `/hanzi test 你好` runs a line through the analyser without anyone having to say it.
 - `/hanzi size 26` sets the pane's text size (10 to 48; default 22).
-- `/hanzi status` prints counters and which CJK font is in use; `/hanzi vocab` the vocabulary size; `/hanzi reset` the pane position.
+- `/hanzi font kai|arial|friz|hei` picks the font: `kai` (default) has every Chinese character and every tone letter but wide Latin; `arial` and `friz` are the usual UI fonts, tidy but without the third-tone letters (ǎ ǐ ǒ ǔ ǚ).
+- `/hanzi tones numbers` writes tones as numbers (`ni3 hao3`) so any font can show them; `/hanzi tones marks` goes back.
+- `/hanzi status` prints counters, the font in use and which fonts the client accepted; `/hanzi vocab` the vocabulary size; `/hanzi reset` the pane position.
 
 Inside dungeons, raids and battlegrounds the client hands addons chat text as a *secret value* that cannot be analysed; the pane then shows the line as is with an "instance" tag.
 
 ## Fonts
 
-Blizzard's fonts have no glyphs for the pinyin tone letters (ǎ ǐ ǒ ǔ ǚ), and an English client may not even ship a Chinese font. The addon therefore bundles a subset of Noto Sans SC (OFL 1.1, see `LICENSES/OFL-NotoSansSC.txt`), which carries the Han characters and the tone letters in one design, and uses it for the pane and the word popup. `/hanzi status` tells you which font is in use.
+The Forever client (1.60.1) refuses every font file shipped by an addon: `SetFont` returns false for any file under `Interface\AddOns`, whatever the font, while Blizzard's own fonts load. A subset of Noto Sans SC (OFL 1.1, see `LICENSES/OFL-NotoSansSC.txt`) is still bundled and tried first, for the day a client build accepts it. Until then the pane uses Blizzard's ARKai (Han plus every tone letter, wide Latin) by default; `/hanzi font` and `/hanzi tones` are the way around its looks. `/hanzi status` tells you which font is in use and which the client accepted.
 
 ## Data
 
