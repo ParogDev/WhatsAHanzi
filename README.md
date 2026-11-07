@@ -17,7 +17,7 @@ Inside dungeons, raids and battlegrounds the client hands addons chat text as a 
 
 ## Fonts
 
-The Forever client (1.60.1) refuses every font file shipped by an addon: `SetFont` returns false for any file under `Interface\AddOns`, whatever the font, while Blizzard's own fonts load. A subset of Noto Sans SC (OFL 1.1, see `LICENSES/OFL-NotoSansSC.txt`) is still bundled and tried first, for the day a client build accepts it. Until then the pane uses Blizzard's ARKai (Han plus every tone letter, wide Latin) by default; `/hanzi font` and `/hanzi tones` are the way around its looks. `/hanzi status` tells you which font is in use and which the client accepted.
+The Forever client (1.60.1) refuses every font file shipped by an addon: `SetFont` returns false for any file under `Interface\AddOns`, whatever the font, while Blizzard's own fonts load. A subset of Noto Sans SC (OFL 1.1, see `LICENSES/OFL-NotoSansSC.txt`) stays in this repository and is tried first, for the day a client build accepts it; release zips leave it out (10 MB that would do nothing). Until then the pane uses Blizzard's ARKai (Han plus every tone letter, wide Latin) by default; `/hanzi font` and `/hanzi tones` are the way around its looks. `/hanzi status` tells you which font is in use and which the client accepted.
 
 ## Data
 
