@@ -1,12 +1,13 @@
 # Whats A Hanzi
 
-A World of Warcraft: Forever addon for learning Chinese from the people you play with. Every Chinese chat line (guild, party, raid, whisper, say) is shown again in a small pane with its pinyin underneath, word by word; hover a word for its meaning. Everything you have seen goes into a vocabulary log you can review later.
+A World of Warcraft: Forever addon for learning Chinese from the people you play with. In the normal chat window, hover any Chinese word (guild, party, raid, whisper, say, channels) to see its pinyin and meaning; the line itself keeps your chat font and colour. A pane, hidden until you open it, shows each Chinese line again with its pinyin underneath. Everything you have seen goes into a vocabulary log you can review later.
 
 Only WoW: Forever (interface 16001) is supported.
 
 ## Use
 
-- `/hanzi` toggles the pane. Drag it where you like.
+- `/hanzi` toggles the pane (hidden by default). Drag it where you like.
+- `/hanzi chat off` stops linking words in the chat window; `/hanzi chat on` turns it back on.
 - `/hanzi test 你好` runs a line through the analyser without anyone having to say it.
 - `/hanzi size 26` sets the pane's text size (10 to 48; default 22).
 - `/hanzi font kai|arial|friz|hei` picks the font: `kai` (default) has every Chinese character and every tone letter but wide Latin; `arial` and `friz` are the usual UI fonts, tidy but without the third-tone letters (ǎ ǐ ǒ ǔ ǚ).
