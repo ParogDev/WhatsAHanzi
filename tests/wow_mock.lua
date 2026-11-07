@@ -85,6 +85,26 @@ function M.install()
 	for _, k in ipairs({ "SetOwner", "ClearLines", "AddLine" }) do
 		_G.GameTooltip[k] = noop
 	end
+	_G.UIParent.GetEffectiveScale = function()
+		return 1
+	end
+	_G.GetCursorPosition = function()
+		return 100, 200
+	end
+	M.chatFilters = {}
+	_G.ChatFrameUtil = {
+		AddMessageEventFilter = function(event, fn)
+			M.chatFilters[event] = fn
+		end,
+	}
+	M.callbacks = {}
+	_G.EventRegistry = {
+		RegisterCallback = function(_, event, fn, owner)
+			M.callbacks[event] = function(...)
+				return fn(owner, ...)
+			end
+		end,
+	}
 	_G.ChatFontNormal = {}
 	_G.DEFAULT_CHAT_FRAME = newFrame(nil, "DEFAULT_CHAT_FRAME")
 	_G.SlashCmdList = {}

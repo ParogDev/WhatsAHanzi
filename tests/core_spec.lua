@@ -16,7 +16,7 @@ describe("Core and Chat", function()
 		local db = ns.initDB({ ui = { hidden = true } })
 		assert.is_true(db.ui.hidden)
 		assert.same({}, db.vocab)
-		assert.equal(1, db.dbVersion)
+		assert.equal(2, db.dbVersion)
 	end)
 
 	it("ignores lines without Chinese", function()
