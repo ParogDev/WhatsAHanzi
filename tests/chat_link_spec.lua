@@ -63,6 +63,10 @@ describe("Chat window links", function()
 		assert.is_true(hook.hover)
 		assert.is_nil(hook.error)
 		assert.equal(hook, ns.selftest.chatHook)
+		-- a second call registers nothing new
+		mock.chatFilters = {}
+		assert.equal(hook, ns.Chat.hookChatFrames())
+		assert.same({}, mock.chatFilters)
 	end)
 
 	it("names the broken link when the chat filter API is missing", function()

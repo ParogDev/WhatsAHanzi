@@ -115,7 +115,7 @@ local function onSlash(input)
 			ns.db.ui.inChat = rest == "on"
 			print(
 				"words in the chat window "
-					.. (ns.db.ui.inChat and "linked for hover" or "left alone")
+					.. (ns.db.ui.inChat and "linked for hover" or "left alone; /hanzi opens the pane")
 					.. " (new lines)"
 			)
 		else
@@ -206,6 +206,14 @@ frame:SetScript("OnEvent", function(self, event, ...)
 		if not ok then
 			selftest.chatHook = { error = "hookChatFrames: " .. tostring(err) }
 			geterrorhandler()(err)
+		end
+		-- No hover in chat (hook broken, or turned off): the pane is the only view, so show it for this session.
+		local hookErr = selftest.chatHook and selftest.chatHook.error
+		if hookErr or ns.db.ui.inChat == false then
+			ns.UI.get():Show()
+			if hookErr then
+				print("|cffff6060" .. hookErr .. "|r; showing the pane instead.")
+			end
 		end
 		selftest.snapshot("login")
 		SLASH_WHATSAHANZI1 = "/hanzi"

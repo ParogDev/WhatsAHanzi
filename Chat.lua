@@ -12,7 +12,11 @@ Chat.EVENTS = {
 	"CHAT_MSG_PARTY_LEADER",
 	"CHAT_MSG_RAID",
 	"CHAT_MSG_RAID_LEADER",
+	"CHAT_MSG_INSTANCE_CHAT",
+	"CHAT_MSG_INSTANCE_CHAT_LEADER",
 	"CHAT_MSG_WHISPER",
+	"CHAT_MSG_WHISPER_INFORM",
+	"CHAT_MSG_EMOTE",
 	"CHAT_MSG_SAY",
 	"CHAT_MSG_YELL",
 	"CHAT_MSG_CHANNEL",
@@ -159,6 +163,10 @@ end
 -- Hooks the chat window: the filter per event and the hover callbacks. Records in selftest.chatHook what
 -- took and, when something is missing, which link broke.
 function Chat.hookChatFrames()
+	if Chat.hooked then
+		return ns.selftest.chatHook
+	end
+	Chat.hooked = true
 	local hook = { filters = 0 }
 	ns.selftest.chatHook = hook
 	if not (ChatFrameUtil and ChatFrameUtil.AddMessageEventFilter) then
