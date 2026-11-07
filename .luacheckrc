@@ -14,7 +14,7 @@ if ok and type(wow) == "table" then
 	read_globals = wow.read_globals
 else
 	read_globals = {
-		"CreateFrame", "UIParent", "GameTooltip", "ChatFontNormal", "DEFAULT_CHAT_FRAME", "SlashCmdList",
+		"CreateFrame", "UIParent", "GameTooltip", "ChatFontNormal", "DEFAULT_CHAT_FRAME",
 		"GetBuildInfo", "GetLocale", "WOW_PROJECT_ID", "C_AddOns", "C_Timer", "issecretvalue", "strsplit",
 		"strlenutf8", "date", "time", "geterrorhandler", "bit", "ChatFrameUtil", "GetCursorPosition",
 	}
