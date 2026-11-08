@@ -517,8 +517,11 @@ function Card.enter(chatFrame, link, text, region, left, bottom, width, height)
 	if not hash then
 		return
 	end
-	if ns.Chat.isSecret(text) then
-		text = nil -- never compared or segmented; the cache alone decides
+	-- The hover's text is the whole escape sequence (|H...|h上下|h, as for OnHyperlinkClick), not the bare
+	-- word; plainText reduces it, and returns nil for a secret, which is never compared or segmented.
+	text = ns.Chat.plainText(text)
+	if text == "" then
+		text = nil
 	end
 	local line = ns.Chat.lines.get(hash)
 	-- A line rebuilt from the chat frame is numbered differently: trust the cache only when the token is

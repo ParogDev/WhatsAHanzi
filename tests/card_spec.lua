@@ -158,6 +158,26 @@ describe("Card", function()
 		assert.equal("灰谷", ns.Card.ctx.line.tokens[ns.Card.ctx.index].word)
 	end)
 
+	it("takes the hover text as Blizzard gives it: the whole escape sequence", function()
+		local lnk = "addon:WhatsAHanzi:" .. line.hash .. ":3"
+		ns.Card.enter(_G.ChatFrame1, lnk, "|cffb9e6ff|H" .. lnk .. "|h灰谷|h|r", nil)
+		assert.is_nil(mock.lastError)
+		assert.is_nil(ns.selftest.cardLineMiss)
+		assert.equal(line, ns.Card.ctx.line)
+		assert.equal(3, ns.Card.ctx.index)
+	end)
+
+	it("keeps the original body and segmentation under the hash, not the linked text", function()
+		local original = "我重上下游戏"
+		local out, cached = ns.Chat.linkify(original)
+		assert.truthy(out:find("|H", 1, true))
+		assert.equal(original, cached.body)
+		assert.equal(#ns.Dict.segment(original), #cached.tokens)
+		local d = ns.Card.build(cached, 2, nil, {})
+		assert.equal(#cached.tokens, #d.sentence)
+		assert.is_nil(ns.Card.sentenceMarkup(d.sentence):find("|H", 1, true))
+	end)
+
 	it("opens from the cache alone when the hovered text is secret", function()
 		local secret = "灰谷"
 		mock.secret[secret] = true
