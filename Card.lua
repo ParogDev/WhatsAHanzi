@@ -305,8 +305,11 @@ local function onKeyDown(self, key)
 	if not (mine and ctx) then
 		return
 	end
-	local word = ctx.line.tokens[ctx.index].word
-	ns.Vocab.toggle(word, key == "K" and "known" or "star")
+	local tok = ctx.line.tokens[ctx.index]
+	if not tok then
+		return
+	end
+	ns.Vocab.toggle(tok.word, key == "K" and "known" or "star")
 	ns.selftest.counters.marks = (ns.selftest.counters.marks or 0) + 1
 	local ok, err = pcall(Card.show, ctx)
 	if not ok then
@@ -491,6 +494,9 @@ function Card.enter(chatFrame, link, text, region, left, bottom, width, height)
 	if not hash then
 		return
 	end
+	if ns.Chat.isSecret(text) then
+		text = nil -- never compared or segmented; the cache alone decides
+	end
 	local line = ns.Chat.lines.get(hash)
 	-- A line rebuilt from the chat frame is numbered differently: trust the cache only when the token is
 	-- the hovered word.
@@ -500,11 +506,18 @@ function Card.enter(chatFrame, link, text, region, left, bottom, width, height)
 		why = index
 		if not line then
 			st.cardLineMiss = why or "line not cached"
-			if type(text) ~= "string" or ns.Chat.isSecret(text) or not ns.Han.hasHan(text) then
+			if type(text) ~= "string" or not ns.Han.hasHan(text) then
 				return
 			end
-			line = { hash = hash, body = text, tokens = ns.Dict.segment(text) }
+			-- The hovered text alone, without its hash: its translation would belong to the whole line.
+			line = { body = text, tokens = ns.Dict.segment(text) }
 			index = 1
+			for k, tok in ipairs(line.tokens) do
+				if tok.han then
+					index = k
+					break
+				end
+			end
 		end
 	end
 	local ctx = {

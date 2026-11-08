@@ -251,6 +251,9 @@ function Chat.lineForLink(chatFrame, link, word)
 		return nil, "chatFrame.GetMessageInfo missing"
 	end
 	local hash, linkIndex = Chat.tokenFromLink(link)
+	if isSecret(word) then
+		word = nil
+	end
 	local needle = "|H" .. link .. "|h"
 	for i = 1, 40 do
 		local msg = chatFrame:GetMessageInfo(i)
@@ -275,7 +278,7 @@ function Chat.lineForLink(chatFrame, link, word)
 				return nil, "word not among the line's tokens"
 			end
 			local line = { hash = hash, body = body, tokens = tokens, rebuilt = true }
-			if hash then
+			if hash and not lines.map[hash] then
 				lines.put(hash, line)
 			end
 			return line, index
@@ -335,14 +338,14 @@ Vocab.DEFAULT_KNOWN_AFTER = 8
 -- a new threshold); the chat filter's cache keys on it.
 Vocab.version = 0
 
-local function knownAfter()
+local function thresholdSetting()
 	return (ns.db and ns.db.ui and ns.db.ui.knownAfter) or Vocab.DEFAULT_KNOWN_AFTER
 end
 
 function Vocab.record(tokens, who)
 	local v = ns.db.vocab
 	local now = time()
-	local threshold = knownAfter()
+	local threshold = thresholdSetting()
 	for _, t in ipairs(tokens) do
 		if t.han then
 			local e = v[t.word]
@@ -350,8 +353,9 @@ function Vocab.record(tokens, who)
 				e = { n = 0, first = now, pinyin = t.pinyin }
 				v[t.word] = e
 			end
+			local was = e.known or e.n >= threshold
 			e.n = e.n + 1
-			if e.n == threshold then
+			if not was and e.n >= threshold then
 				Vocab.version = Vocab.version + 1
 			end
 			e.last = now
@@ -371,7 +375,7 @@ function Vocab.isKnown(word, vocab, knownAfter)
 	if e.known then
 		return true
 	end
-	return (e.n or 0) >= (knownAfter or knownAfter())
+	return (e.n or 0) >= (knownAfter or thresholdSetting())
 end
 
 -- Toggles a flag ("known" or "star") on a word's vocabulary entry, creating the entry if needed.
@@ -383,6 +387,8 @@ function Vocab.toggle(word, flag)
 		v[word] = e
 	end
 	e[flag] = not e[flag] or nil
-	Vocab.version = Vocab.version + 1
+	if flag == "known" then
+		Vocab.version = Vocab.version + 1
+	end
 	return e[flag] == true
 end

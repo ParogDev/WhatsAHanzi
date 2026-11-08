@@ -21,6 +21,9 @@ describe("Chat window links", function()
 	end)
 
 	it("leaves known words in the line's own colour", function()
+		ns.db.vocab["怒焰"] = { n = 2 }
+		assert.is_false(ns.Vocab.isKnown("怒焰"))
+		assert.equal(NEW .. link("怒焰", 1, "怒焰") .. "|r", ns.Chat.linkify("怒焰"))
 		ns.db.vocab["你好"] = { n = 8 }
 		ns.db.vocab["怒焰"] = { n = 1, known = true }
 		assert.equal(link("你好", 1, "你好"), ns.Chat.linkify("你好"))
