@@ -158,6 +158,16 @@ describe("Card", function()
 		assert.equal("灰谷", ns.Card.ctx.line.tokens[ns.Card.ctx.index].word)
 	end)
 
+	it("opens from the cache alone when the hovered text is secret", function()
+		local secret = "灰谷"
+		mock.secret[secret] = true
+		ns.Card.enter(_G.ChatFrame1, "addon:WhatsAHanzi:" .. line.hash .. ":3", secret, nil)
+		assert.is_nil(mock.lastError)
+		assert.is_nil(ns.selftest.cardLineMiss)
+		assert.equal(line, ns.Card.ctx.line)
+		assert.equal(3, ns.Card.ctx.index)
+	end)
+
 	it("falls back to the word alone when the line is not cached and not in the chat frame", function()
 		ns.Chat.lines.clear()
 		ns.Card.enter(_G.ChatFrame1, "addon:WhatsAHanzi:" .. line.hash .. ":3", "灰谷", nil)

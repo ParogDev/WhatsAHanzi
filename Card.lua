@@ -305,6 +305,9 @@ local function modifierDown()
 end
 
 local function onKeyDown(self, key)
+	if InCombatLockdown and InCombatLockdown() then
+		return -- SetPropagateKeyboardInput is protected now; the frame hides on PLAYER_REGEN_DISABLED
+	end
 	local ctx = Card.ctx
 	-- The hovered line scrolled or its tab closed without a leave event: give the keyboard back.
 	if ctx and ctx.region and ctx.region.IsVisible and not ctx.region:IsVisible() then
@@ -332,7 +335,10 @@ end
 
 -- Key releases pass through the same way, so a key held across a hover is not left stuck.
 local function onKeyUp(self, key)
-	self:SetPropagateKeyboardInput(key ~= "K" and key ~= "S")
+	if InCombatLockdown and InCombatLockdown() then
+		return
+	end
+	self:SetPropagateKeyboardInput(key ~= "K" and key ~= "S" or modifierDown())
 end
 
 local function showKeys(on)
@@ -517,7 +523,9 @@ function Card.enter(chatFrame, link, text, region, left, bottom, width, height)
 	local line = ns.Chat.lines.get(hash)
 	-- A line rebuilt from the chat frame is numbered differently: trust the cache only when the token is
 	-- the hovered word.
-	if not (line and line.tokens[index] and line.tokens[index].word == text) then
+	-- the hovered word. Secret text (instances, forced restrictions) cannot be compared: the hash and index
+	-- alone decide, and nothing of it is read.
+	if not (line and line.tokens[index] and (text == nil or line.tokens[index].word == text)) then
 		local why
 		line, index = ns.Chat.lineForLink(chatFrame, link, text)
 		why = index
