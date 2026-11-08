@@ -11,8 +11,9 @@ describe("Options", function()
 		local cat = ns.Options.register()
 		assert.truthy(cat)
 		assert.equal(cat, _G.Settings.addonCategory)
-		assert.equal(5 + #ns.Chat.EVENTS, ns.selftest.options.settings)
+		assert.equal(6 + #ns.Chat.EVENTS, ns.selftest.options.settings)
 		assert.is_false(ns.db.ui.hoverKeys) -- K/S on the card is opt-in
+		assert.is_true(ns.db.ui.speak) -- a held hover speaks the word
 		assert.equal(1, ns.db.ui.cardScale)
 		assert.equal(8, ns.db.ui.knownAfter)
 		assert.is_true(ns.db.channels.CHAT_MSG_GUILD)

@@ -413,6 +413,7 @@ function M.loadAddon(dir, opts)
 		"Pinyin.lua",
 		"Dict.lua",
 		"Font.lua",
+		"Sound.lua",
 		"Card.lua",
 		"UI.lua",
 		"Chat.lua",
