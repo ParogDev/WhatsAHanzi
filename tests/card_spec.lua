@@ -111,6 +111,15 @@ describe("Card", function()
 		end
 	end
 
+	it("never writes text into a FontString without a font (the client raises 'Font not set')", function()
+		assert.has_error(function()
+			CreateFrame("Frame"):CreateFontString(nil, "OVERLAY"):SetText("x")
+		end)
+		ns.Card.enter(_G.ChatFrame1, "addon:WhatsAHanzi:" .. line.hash .. ":3", "灰谷", nil, 10, 2, 30, 14)
+		assert.is_nil(ns.selftest.lastError)
+		assert.is_nil(mock.lastError)
+	end)
+
 	it("takes no keys while the K/S option is off (the default)", function()
 		assert.is_false(ns.db.ui.hoverKeys)
 		assert.is_false(ns.Card.keysEnabled())

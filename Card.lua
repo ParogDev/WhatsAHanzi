@@ -146,7 +146,9 @@ local function acquireFS(card)
 	p.nfs = p.nfs + 1
 	local fs = p.fs[p.nfs]
 	if not fs then
-		fs = card:CreateFontString(nil, "OVERLAY")
+		-- Inherit a font object: a bare FontString has no font, and the SetText("") below would raise
+		-- "Font not set" (every card failed in game that way). setFont replaces it before any real text.
+		fs = card:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
 		p.fs[p.nfs] = fs
 	end
 	fs:ClearAllPoints()
