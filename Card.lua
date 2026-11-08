@@ -58,8 +58,8 @@ Card.KIND_ATLAS = {
 	dungeon = "Dungeon",
 	boss = "DungeonSkull",
 	class = "Class",
-	race = "socialqueuing-icon-group",
-	faction = "socialqueuing-icon-group",
+	race = "AlliedRace-UnlockingFrame-Male", -- a figure: the race, not a party
+	faction = "UI-HUD-UnitFrame-Player-PVP-FFAIcon", -- the neutral PvP badge: neither Alliance nor Horde
 	profession = "Profession",
 	role = "UI-LFG-RoleIcon-Generic",
 	item = "bags-icon-equipment",
@@ -68,10 +68,77 @@ Card.KIND_ATLAS = {
 	meme = "communities-icon-chat",
 }
 
+-- Atlases that are not square, drawn at their own aspect ratio (height 14): the PvP badge is 28x44.
+Card.KIND_ATLAS_WIDTH = { faction = 9 }
+
 -- "|A:poi-town:14:14|a " for a known kind, "" otherwise.
 function Card.kindIcon(kind)
 	local atlas = kind and Card.KIND_ATLAS[kind]
-	return atlas and ("|A:" .. atlas .. ":14:14|a ") or ""
+	if not atlas then
+		return ""
+	end
+	return "|A:" .. atlas .. ":14:" .. (Card.KIND_ATLAS_WIDTH[kind] or 14) .. "|a "
+end
+
+-- Where a hovered link sits in its chat line, one rect per row: { { left, bottom, width, height }, ... },
+-- offsets from the FontString's BOTTOMLEFT like OnHyperlinkEnter's. Those bounds cover one row only, so a
+-- word that wraps would be lit on its last row alone. The FontString measures the link's byte span itself
+-- (CalculateScreenAreaFromCharacterSpan, the call Blizzard's chat text selection uses). Rows come back
+-- top to bottom. When the text is secret, the API is missing or the link is not in the text, the one rect
+-- OnHyperlinkEnter gave stands in, and why is the link that broke.
+function Card.linkRects(region, link, left, bottom, width, height)
+	local fallback = type(left) == "number" and { { left = left, bottom = bottom, width = width, height = height } }
+		or nil
+	if not (region and region.CalculateScreenAreaFromCharacterSpan and region.GetText) then
+		return fallback, "no CalculateScreenAreaFromCharacterSpan"
+	end
+	if type(link) ~= "string" or ns.Chat.isSecret(link) then
+		return fallback, "link secret"
+	end
+	local text = region:GetText()
+	if type(text) ~= "string" or ns.Chat.isSecret(text) then
+		return fallback, "line text secret"
+	end
+	-- |H<link>|h<word>|h: the span runs from the |H to the closing |h. Our links are unique in a line
+	-- (hash:index), so the first match is the one.
+	local open = "|H" .. link .. "|h"
+	local s, e = text:find(open, 1, true)
+	if not s then
+		return fallback, "link not in line text"
+	end
+	local close = text:find("|h", e + 1, true)
+	if not close then
+		return fallback, "link not closed"
+	end
+	local ok, areas = pcall(region.CalculateScreenAreaFromCharacterSpan, region, s, close + 1)
+	if not ok or type(areas) ~= "table" or not areas[1] then
+		return fallback, "no screen area for the span"
+	end
+	local rects = {}
+	for _, a in ipairs(areas) do
+		if type(a.width) == "number" and a.width > 0 and type(a.height) == "number" and a.height > 0 then
+			rects[#rects + 1] = { left = a.left, bottom = a.bottom, width = a.width, height = a.height }
+		end
+	end
+	if not rects[1] then
+		return fallback, "empty screen area"
+	end
+	table.sort(rects, function(a, b)
+		return a.bottom > b.bottom
+	end)
+	return rects
+end
+
+-- The box around a list of rects.
+function Card.boundsOf(rects)
+	local l, b, r, t = math.huge, math.huge, -math.huge, -math.huge
+	for _, x in ipairs(rects) do
+		l = math.min(l, x.left)
+		b = math.min(b, x.bottom)
+		r = math.max(r, x.left + x.width)
+		t = math.max(t, x.bottom + x.height)
+	end
+	return { left = l, bottom = b, width = r - l, height = t - b }
 end
 
 -- First two senses of a CEDICT gloss: "to be able/can/possible/..." -> "to be able / can".
@@ -311,30 +378,57 @@ local function cardFrame()
 	return f
 end
 
--- The underline under the hovered word, inside the chat frame, at the bounds OnHyperlinkEnter gave.
+-- One row's glow and underline, pooled on the highlight frame (a wrapped word needs one per row).
+local function highlightRow(i)
+	local row = highlight.rows[i]
+	if not row then
+		row = {}
+		row.glow = highlight:CreateTexture(nil, "BACKGROUND")
+		row.glow:SetColorTexture(ACCENT[1], ACCENT[2], ACCENT[3], 0.14)
+		row.bar = highlight:CreateTexture(nil, "ARTWORK")
+		row.bar:SetColorTexture(ACCENT[1], ACCENT[2], ACCENT[3], 0.9)
+		highlight.rows[i] = row
+	end
+	return row
+end
+
+-- The underline under the hovered word, inside the chat frame: one glow and bar per row in ctx.rects
+-- (Card.linkRects), all inside one frame that spans them so the fade animates them together.
 local function showHighlight(ctx)
 	if not highlight then
 		highlight = CreateFrame("Frame", ADDON .. "CardHighlight", UIParent)
 		highlight:SetFrameStrata("TOOLTIP")
-		highlight.glow = highlight:CreateTexture(nil, "BACKGROUND")
-		highlight.glow:SetColorTexture(ACCENT[1], ACCENT[2], ACCENT[3], 0.14)
-		highlight.glow:SetAllPoints()
-		highlight.bar = highlight:CreateTexture(nil, "ARTWORK")
-		highlight.bar:SetColorTexture(ACCENT[1], ACCENT[2], ACCENT[3], 0.9)
-		highlight.bar:SetPoint("BOTTOMLEFT")
-		highlight.bar:SetPoint("BOTTOMRIGHT")
-		highlight.bar:SetHeight(2)
+		highlight.rows = {}
 		highlight.anim = entranceGroup(highlight, false, 0.1)
 		highlight.out = exitGroup(highlight)
 	end
-	if not (ctx.region and type(ctx.left) == "number") then
+	local rects = ctx.rects
+	if not (ctx.region and rects and rects[1]) then
 		highlight:Hide()
 		return
 	end
 	local r = scaleRatio(ctx.region, highlight)
+	local box = Card.boundsOf(rects)
 	highlight:ClearAllPoints()
-	highlight:SetPoint("BOTTOMLEFT", ctx.region, "BOTTOMLEFT", ctx.left * r, ctx.bottom * r)
-	highlight:SetSize(math.max(ctx.width * r, 1), math.max(ctx.height * r, 1))
+	highlight:SetPoint("BOTTOMLEFT", ctx.region, "BOTTOMLEFT", box.left * r, box.bottom * r)
+	highlight:SetSize(math.max(box.width * r, 1), math.max(box.height * r, 1))
+	for i, rect in ipairs(rects) do
+		local row = highlightRow(i)
+		local x, y = (rect.left - box.left) * r, (rect.bottom - box.bottom) * r
+		local w, h = math.max(rect.width * r, 1), math.max(rect.height * r, 1)
+		row.glow:ClearAllPoints()
+		row.glow:SetPoint("BOTTOMLEFT", highlight, "BOTTOMLEFT", x, y)
+		row.glow:SetSize(w, h)
+		row.bar:ClearAllPoints()
+		row.bar:SetPoint("BOTTOMLEFT", highlight, "BOTTOMLEFT", x, y)
+		row.bar:SetSize(w, 2)
+		row.glow:Show()
+		row.bar:Show()
+	end
+	for i = #rects + 1, #highlight.rows do
+		highlight.rows[i].glow:Hide()
+		highlight.rows[i].bar:Hide()
+	end
 	showAnimated(highlight)
 end
 
@@ -552,9 +646,11 @@ function Card.show(ctx)
 
 	-- Anchor: bottom-left just above the hovered word; else above the given frame; else the cursor.
 	c:ClearAllPoints()
-	if ctx.region and type(ctx.left) == "number" then
+	if ctx.region and ctx.rects and ctx.rects[1] then
+		-- Above the word's first row: a word that wraps starts on the row above OnHyperlinkEnter's bounds.
+		local top = ctx.rects[1]
 		local r = scaleRatio(ctx.region, c)
-		c:SetPoint("BOTTOMLEFT", ctx.region, "BOTTOMLEFT", ctx.left * r - PAD, (ctx.bottom + ctx.height) * r + 6)
+		c:SetPoint("BOTTOMLEFT", ctx.region, "BOTTOMLEFT", top.left * r - PAD, (top.bottom + top.height) * r + 6)
 	elseif ctx.anchor then
 		c:SetPoint("BOTTOMLEFT", ctx.anchor, "TOPLEFT", 0, 4)
 	else
@@ -627,6 +723,10 @@ function Card.enter(chatFrame, link, text, region, left, bottom, width, height)
 		width = width,
 		height = height,
 	}
+	local rectsWhy
+	ctx.rects, rectsWhy = Card.linkRects(region, link, left, bottom, width, height)
+	st.cardRows = ctx.rects and #ctx.rects or 0
+	st.cardRowsMiss = rectsWhy
 	Card.ctx = ctx
 	st.counters.cards = (st.counters.cards or 0) + 1
 	local ok, data = pcall(Card.show, ctx)
