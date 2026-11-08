@@ -138,6 +138,13 @@ function Options.register()
 			.. "so K and S stay with your own bindings."
 	)
 
+	local speak = addon("speak", ui, "Boolean", "Speak hovered words", true)
+	Settings.CreateCheckbox(
+		category,
+		speak,
+		"A word held under the mouse for a moment is read aloud, one syllable at a time, on the Master channel."
+	)
+
 	if layout and CreateSettingsListSectionHeaderInitializer then
 		layout:AddInitializer(CreateSettingsListSectionHeaderInitializer("Channels"))
 	end

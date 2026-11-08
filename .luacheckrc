@@ -19,9 +19,12 @@ else
 		"strlenutf8", "date", "time", "geterrorhandler", "bit", "ChatFrameUtil", "GetCursorPosition",
 		-- CI in this repo runs standalone: every global the addon touches must be here as well.
 		"Settings", "InCombatLockdown", "C_GuildInfo", "IsShiftKeyDown", "IsControlKeyDown", "IsAltKeyDown",
-		"CreateSettingsListSectionHeaderInitializer", "WOW_PROJECT_CAMELOT", "SlashCmdList",
+		"CreateSettingsListSectionHeaderInitializer", "WOW_PROJECT_CAMELOT",
+		"PlaySoundFile", "StopSound", "C_CVar", "hooksecurefunc", "NUM_CHAT_WINDOWS",
 	}
 end
+-- A GlobalStrings constant, not in the generated API list.
+read_globals[#read_globals + 1] = "GUILD_MOTD_TEMPLATE"
 -- FrameXML globals the generated list doesn't carry (it is built from the C API lists).
 read_globals[#read_globals + 1] = "EventRegistry"
 read_globals[#read_globals + 1] = "MinimalSliderWithSteppersMixin"

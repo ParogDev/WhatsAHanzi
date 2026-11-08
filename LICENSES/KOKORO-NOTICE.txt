@@ -1,0 +1,12 @@
+Syllable recordings in Sounds/
+
+The .ogg files in Sounds/ (one per Mandarin syllable and tone, named in numbered pinyin:
+ni3.ogg, lv4.ogg for lü4, ma5.ogg for the neutral tone; probe.ogg is a copy of ni3.ogg) were
+synthesised once with the Kokoro-82M v1.1-zh text-to-speech model, voice zf_001, by the
+WhatsAHanzi companion's gen_audio.py. No human voice was recorded.
+
+Kokoro-82M is by hexgrad and is released under the Apache License, Version 2.0:
+https://huggingface.co/hexgrad/Kokoro-82M-v1.1-zh
+https://www.apache.org/licenses/LICENSE-2.0
+
+The recordings themselves are distributed with this addon under its MIT licence (LICENSE).
