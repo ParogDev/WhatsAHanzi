@@ -37,7 +37,12 @@ describe("MOTD links", function()
 	it("says why it left the line alone", function()
 		local f = chatFrame({ { "Guild Message of the Day: raid at 8", 1 } })
 		assert.same({ nil, "motd has no Han" }, { ns.Chat.relinkMOTD(f, "raid at 8") })
-		assert.same({ nil, "motd absent or secret" }, { ns.Chat.relinkMOTD(f, nil) })
+		assert.same({ nil, "motd not loaded yet (empty)" }, { ns.Chat.relinkMOTD(f, nil) })
+		assert.same({ nil, "motd not loaded yet (empty)" }, { ns.Chat.relinkMOTD(f, "") })
+		local secret = "今晚开组"
+		mock.secret[secret] = true
+		assert.same({ nil, "motd is a secret value" }, { ns.Chat.relinkMOTD(f, secret) })
+		mock.secret[secret] = nil
 		assert.same({ nil, "chat frame has no TransformMessages" }, { ns.Chat.relinkMOTD({}, "今晚") })
 	end)
 
@@ -61,6 +66,44 @@ describe("MOTD links", function()
 		hooked.fn(f2, "明天休息")
 		assert.equal(2, st.relinked)
 		assert.truthy(f2.lines[1][1]:find("|H", 1, true))
+		assert.is_nil(st.printed) -- the 30 s retry found the line linked: no second copy
+		_G.ChatFrame1 = nil
+	end)
+
+	it("after a /reload, retries until the MOTD loads and prints one linked line", function()
+		local timers = {}
+		_G.C_Timer.After = function(d, fn)
+			timers[#timers + 1] = { d = d, fn = fn }
+		end
+		_G.hooksecurefunc = function() end
+		_G.ChatFrameUtil.DisplayGMOTD = function() end
+		local motd = ""
+		_G.C_GuildInfo = {
+			GetMOTD = function()
+				return motd
+			end,
+		}
+		local f = chatFrame({ { "some other line", 1 } })
+		function f:IsEventRegistered(ev)
+			return ev == "GUILD_MOTD"
+		end
+		function f:AddMessage(msg, r)
+			self.lines[#self.lines + 1] = { msg, r }
+		end
+		_G.ChatFrame1 = f
+		local st = ns.Chat.hookMOTD()
+		assert.equal("motd not loaded yet (empty)", st.why)
+		motd = "今晚开组" -- guild data arrives
+		for _, t in ipairs(timers) do
+			t.fn()
+		end
+		assert.equal(3, st.tries)
+		assert.equal(1, st.printed)
+		assert.equal(2, #f.lines)
+		assert.truthy(f.lines[2][1]:find("|H", 1, true))
+		assert.equal(ns.Hash.fnv1a32("今晚开组"), ns.db.motd.hash)
+		ns.Chat.relinkAllMOTD(nil, true) -- another late try: still one copy
+		assert.equal(2, #f.lines)
 		_G.ChatFrame1 = nil
 	end)
 end)

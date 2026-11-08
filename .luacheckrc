@@ -19,8 +19,8 @@ else
 		"strlenutf8", "date", "time", "geterrorhandler", "bit", "ChatFrameUtil", "GetCursorPosition",
 		-- CI in this repo runs standalone: every global the addon touches must be here as well.
 		"Settings", "InCombatLockdown", "C_GuildInfo", "IsShiftKeyDown", "IsControlKeyDown", "IsAltKeyDown",
-		"CreateSettingsListSectionHeaderInitializer", "WOW_PROJECT_CAMELOT", "SlashCmdList",
-			"PlaySoundFile", "StopSound", "C_CVar", "hooksecurefunc", "NUM_CHAT_WINDOWS",
+		"CreateSettingsListSectionHeaderInitializer", "WOW_PROJECT_CAMELOT",
+		"PlaySoundFile", "StopSound", "C_CVar", "hooksecurefunc", "NUM_CHAT_WINDOWS",
 	}
 end
 -- A GlobalStrings constant, not in the generated API list.

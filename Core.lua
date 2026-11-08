@@ -324,7 +324,7 @@ frame:SetScript("OnEvent", function(self, event, ...)
 	elseif event == "PLAYER_LOGOUT" then
 		selftest.snapshot("logout")
 	elseif event == "GUILD_MOTD" then
-		ns.Chat.rememberMOTD(...)
+		ns.Chat.onMOTDEvent(...)
 	elseif event:sub(1, 9) == "CHAT_MSG_" then
 		ns.Chat.onEvent(self, event, ...)
 	end
