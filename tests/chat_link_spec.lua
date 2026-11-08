@@ -3,6 +3,10 @@ local mock = require("tests.wow_mock")
 describe("Chat window links", function()
 	local ns
 	local L = "|Haddon:WhatsAHanzi:"
+	local NEW = "|cffb9e6ff"
+	local function link(text, index, word)
+		return L .. ns.Hash.fnv1a32(text) .. ":" .. index .. "|h" .. word .. "|h"
+	end
 	before_each(function()
 		mock.install()
 		ns = mock.loadAddon(".")
@@ -11,9 +15,45 @@ describe("Chat window links", function()
 		ns.Data.maxWordLen = 2
 	end)
 
-	it("links each Chinese word and keeps the rest of the line", function()
-		assert.equal(L .. "你好|h你好|h gg", ns.Chat.linkify("你好 gg"))
-		assert.equal("lf " .. L .. "怒焰|h怒焰|h", ns.Chat.linkify("lf 怒焰"))
+	it("links each Chinese word with the line hash and token index, new words in the soft colour", function()
+		assert.equal(NEW .. link("你好 gg", 1, "你好") .. "|r gg", ns.Chat.linkify("你好 gg"))
+		assert.equal("lf " .. NEW .. link("lf 怒焰", 2, "怒焰") .. "|r", ns.Chat.linkify("lf 怒焰"))
+	end)
+
+	it("leaves known words in the line's own colour", function()
+		ns.db.vocab["你好"] = { n = 8 }
+		ns.db.vocab["怒焰"] = { n = 1, known = true }
+		assert.equal(link("你好", 1, "你好"), ns.Chat.linkify("你好"))
+		assert.equal(link("怒焰", 1, "怒焰"), ns.Chat.linkify("怒焰"))
+		ns.db.ui.knownAfter = 20
+		assert.equal(NEW .. link("你好", 1, "你好") .. "|r", ns.Chat.linkify("你好"))
+	end)
+
+	it("caches the line's tokens under its hash", function()
+		local out, line = ns.Chat.linkify("gg 你好 怒焰")
+		assert.truthy(out)
+		assert.equal(ns.Hash.fnv1a32("gg 你好 怒焰"), line.hash)
+		assert.equal("gg 你好 怒焰", line.body)
+		assert.same({ "gg ", "你好", " ", "怒焰" }, { line.tokens[1].word, line.tokens[2].word, line.tokens[3].word, line.tokens[4].word })
+		assert.equal(line, ns.Chat.lines.get(line.hash))
+		local hash, index = ns.Chat.tokenFromLink("addon:WhatsAHanzi:" .. line.hash .. ":4")
+		assert.equal(line.hash, hash)
+		assert.equal(4, index)
+		assert.is_nil(ns.Chat.tokenFromLink("item:1234"))
+		assert.is_nil(ns.Chat.tokenFromLink("addon:WhatsAHanzi:你好"))
+	end)
+
+	it("keeps the 200 most recently used lines", function()
+		ns.Chat.LINES_MAX = 3
+		ns.Chat.linkify("你好 1")
+		ns.Chat.linkify("你好 2")
+		ns.Chat.linkify("你好 3")
+		ns.Chat.lines.get(ns.Hash.fnv1a32("你好 1")) -- used again: stays
+		ns.Chat.linkify("你好 4")
+		assert.is_nil(ns.Chat.lines.get(ns.Hash.fnv1a32("你好 2")))
+		assert.truthy(ns.Chat.lines.get(ns.Hash.fnv1a32("你好 1")))
+		assert.truthy(ns.Chat.lines.get(ns.Hash.fnv1a32("你好 4")))
+		assert.equal(3, ns.Chat.lines.count)
 	end)
 
 	it("leaves lines without Chinese, secrets and non-strings alone", function()
@@ -24,11 +64,15 @@ describe("Chat window links", function()
 		assert.is_nil(ns.Chat.linkify(secret))
 	end)
 
-	it("copies existing links, textures and atlases untouched", function()
+	it("copies existing links, textures and atlases untouched and keeps them as plain tokens", function()
 		local item = "|cff0070dd|Hitem:1234::::::::60|h[你好剑]|h|r"
 		local tex = "|TInterface\\Icons\\INV_Misc_Book_09:0|t"
-		local out = ns.Chat.linkify(item .. " 你好 " .. tex)
-		assert.equal(item .. " " .. L .. "你好|h你好|h " .. tex, out)
+		local text = item .. " 你好 " .. tex
+		local out, line = ns.Chat.linkify(text)
+		assert.equal(item .. " " .. NEW .. link(text, 3, "你好") .. "|r " .. tex, out)
+		assert.equal("[你好剑]", line.tokens[1].word)
+		assert.is_true(line.tokens[1].escape)
+		assert.equal("你好", line.tokens[3].word)
 	end)
 
 	it("filters chat events with the linked text and passes the other arguments through", function()
@@ -37,7 +81,7 @@ describe("Chat window links", function()
 		assert.is_function(f)
 		local discard, text, sender = f(nil, "CHAT_MSG_GUILD", "你好", "Bob-Realm")
 		assert.is_false(discard)
-		assert.equal(L .. "你好|h你好|h", text)
+		assert.equal(NEW .. link("你好", 1, "你好") .. "|r", text)
 		assert.equal("Bob-Realm", sender)
 		assert.equal(1, ns.selftest.counters.linked)
 		-- the same line in a second chat frame: same result, counted once
@@ -76,21 +120,41 @@ describe("Chat window links", function()
 		assert.truthy(hook.error:find("AddMessageEventFilter"))
 	end)
 
-	it("shows the gloss on hover of our links only, and hides it on leave", function()
+	it("opens the card on hover of our links only, with the bounds, and closes it on leave", function()
 		ns.Chat.hookChatFrames()
-		local shown, hidden
-		ns.UI.showGlossAtCursor = function(w)
-			shown = w
+		local entered, left
+		ns.Card.enter = function(...)
+			entered = { ... }
 		end
-		ns.UI.hideGloss = function()
-			hidden = true
+		ns.Card.leave = function()
+			left = true
 		end
-		mock.callbacks["ChatFrame.OnHyperlinkEnter"](nil, "item:1234")
-		assert.is_nil(shown)
-		mock.callbacks["ChatFrame.OnHyperlinkEnter"](nil, "addon:WhatsAHanzi:怒焰")
-		assert.equal("怒焰", shown)
+		local region = {}
+		mock.callbacks["ChatFrame.OnHyperlinkEnter"](nil, _G.ChatFrame1, "item:1234", "[x]", region, 1, 2, 3, 4)
+		assert.is_nil(entered)
+		local _, line = ns.Chat.linkify("怒焰")
+		local lnk = "addon:WhatsAHanzi:" .. line.hash .. ":1"
+		mock.callbacks["ChatFrame.OnHyperlinkEnter"](nil, _G.ChatFrame1, lnk, "怒焰", region, 10, 20, 30, 40)
+		assert.same({ _G.ChatFrame1, lnk, "怒焰", region, 10, 20, 30, 40 }, entered)
 		mock.callbacks["ChatFrame.OnHyperlinkLeave"](nil)
-		assert.is_true(hidden)
+		assert.is_true(left)
+	end)
+
+	it("rebuilds an uncached line from the chat frame's messages", function()
+		local out, line = ns.Chat.linkify("你好 gg 怒焰")
+		local lnk = "addon:WhatsAHanzi:" .. line.hash .. ":4"
+		_G.ChatFrame1:AddMessage("[Guild] [Bob]: " .. out)
+		_G.ChatFrame1:AddMessage("[Guild] [Ann]: later line")
+		ns.Chat.lines.clear()
+		local got, index = ns.Chat.lineForLink(_G.ChatFrame1, lnk, "怒焰")
+		assert.equal("你好 gg 怒焰", got.body)
+		assert.equal(4, index)
+		assert.equal("怒焰", got.tokens[index].word)
+		assert.is_true(got.rebuilt)
+		assert.equal(got, ns.Chat.lines.get(line.hash))
+		local none, why = ns.Chat.lineForLink(_G.ChatFrame1, "addon:WhatsAHanzi:00000000:1", "你好")
+		assert.is_nil(none)
+		assert.truthy(why:find("not in the last 40"))
 	end)
 
 	it("hides the pane once for players upgrading from version 1", function()

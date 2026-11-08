@@ -21,6 +21,7 @@ else
 end
 -- FrameXML globals the generated list doesn't carry (it is built from the C API lists).
 read_globals[#read_globals + 1] = "EventRegistry"
+read_globals[#read_globals + 1] = "MinimalSliderWithSteppersMixin"
 
 -- SlashCmdList is a client table addons write their handler into; listing it here makes its fields writable.
 globals = { "WhatsAHanzi", "WhatsAHanziDB", "SLASH_WHATSAHANZI1", "SLASH_WHATSAHANZI2", "SlashCmdList" }

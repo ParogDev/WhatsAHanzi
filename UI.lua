@@ -1,4 +1,5 @@
--- The learning pane: a movable, scrollable frame that shows each Chinese line, its pinyin, and a gloss on hover.
+-- The learning pane: a movable, scrollable frame that shows each Chinese line with its pinyin. Hovering a
+-- word there shows the same card as in the chat window (Card.lua).
 local ADDON, ns = ...
 local UI = {}
 ns.UI = UI
@@ -54,12 +55,14 @@ local function createFrame()
 	end)
 	msg:SetScript("OnHyperlinkEnter", function(self, link)
 		local kind, word = strsplit(":", link, 2)
-		if kind == "wahword" then
-			UI.showGloss(self, word)
+		if kind == "wahword" and ns.Card then
+			ns.Card.enterWord(self, word)
 		end
 	end)
 	msg:SetScript("OnHyperlinkLeave", function()
-		UI.hideGloss()
+		if ns.Card then
+			ns.Card.leave()
+		end
 	end)
 	f.msg = msg
 	UI.applyFontSize(msg)
@@ -91,79 +94,6 @@ function UI.setFontSize(n)
 	local f = UI.get()
 	UI.applyFontSize(f.msg)
 	return true
-end
-
--- Our own gloss popup instead of GameTooltip: the tooltip's font has no pinyin tone letters, and setting
--- fonts on GameTooltip's shared lines would leak into every other tooltip.
-local gloss
-local function glossFrame()
-	if gloss then
-		return gloss
-	end
-	gloss = CreateFrame("Frame", ADDON .. "Gloss", UIParent, "BackdropTemplate")
-	gloss:SetFrameStrata("TOOLTIP")
-	gloss:SetClampedToScreen(true)
-	if gloss.SetBackdrop then
-		gloss:SetBackdrop({
-			bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
-			edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
-			tile = true,
-			tileSize = 16,
-			edgeSize = 12,
-			insets = { left = 3, right = 3, top = 3, bottom = 3 },
-		})
-		gloss:SetBackdropColor(0.05, 0.05, 0.1, 0.95)
-	end
-	gloss.word = gloss:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
-	gloss.word:SetPoint("TOPLEFT", 10, -8)
-	gloss.pinyin = gloss:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-	gloss.pinyin:SetPoint("TOPLEFT", gloss.word, "BOTTOMLEFT", 0, -4)
-	gloss.meaning = gloss:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-	gloss.meaning:SetPoint("TOPLEFT", gloss.pinyin, "BOTTOMLEFT", 0, -4)
-	gloss.meaning:SetWidth(300)
-	gloss.meaning:SetJustifyH("LEFT")
-	gloss.meaning:SetWordWrap(true)
-	gloss:Hide()
-	return gloss
-end
-
-function UI.showGloss(anchor, word)
-	local e = ns.Data and ns.Data.dict and ns.Data.dict[word]
-	local g = glossFrame()
-	local size = (ns.db.ui.fontSize or UI.DEFAULT_FONT_SIZE)
-	ns.Font.apply(g.word, size + 6)
-	ns.Font.apply(g.pinyin, size)
-	ns.Font.apply(g.meaning, math.max(12, size - 4))
-	g.word:SetText(word)
-	if e then
-		g.pinyin:SetText("|cff99ccff" .. ns.Pinyin.display(e[1]) .. "|r")
-		g.meaning:SetText(e[2])
-	else
-		g.pinyin:SetText("|cff99ccff" .. ns.Pinyin.display(ns.Pinyin.string(word)) .. "|r")
-		g.meaning:SetText("|cff888888(no dictionary entry)|r")
-	end
-	local w = math.max(g.word:GetStringWidth(), g.pinyin:GetStringWidth(), math.min(300, g.meaning:GetStringWidth()))
-	g:SetSize(w + 20, g.word:GetStringHeight() + g.pinyin:GetStringHeight() + g.meaning:GetStringHeight() + 24)
-	g:ClearAllPoints()
-	if anchor then
-		g:SetPoint("BOTTOMLEFT", anchor, "TOPLEFT", 0, 4)
-	else
-		-- A word in the chat window: the popup sits just above the cursor.
-		local x, y = GetCursorPosition()
-		local scale = UIParent:GetEffectiveScale()
-		g:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT", x / scale - 10, y / scale + 14)
-	end
-	g:Show()
-end
-
-function UI.showGlossAtCursor(word)
-	UI.showGloss(nil, word)
-end
-
-function UI.hideGloss()
-	if gloss then
-		gloss:Hide()
-	end
 end
 
 function UI.get()
@@ -198,7 +128,7 @@ function UI.addAnalysed(sender, tokens, pinyinLine)
 	local parts = {}
 	for _, t in ipairs(tokens) do
 		if t.han then
-			local color = t.known and "|cffffffff" or "|cffffaa66"
+			local color = ns.Vocab.isKnown(t.word) and "|cffffffff" or ns.Chat.NEW_WORD_COLOR
 			parts[#parts + 1] = color .. "|Hwahword:" .. t.word .. "|h" .. t.word .. "|h|r"
 		else
 			parts[#parts + 1] = t.word

@@ -1,32 +1,28 @@
 # Whats A Hanzi
 
-A World of Warcraft: Forever addon for learning Chinese from the people you play with. In the normal chat window, hover any Chinese word (guild, party, raid, whisper, say, channels) to see its pinyin and meaning; the line itself keeps your chat font and colour. A pane, hidden until you open it, shows each Chinese line again with its pinyin underneath. Everything you have seen goes into a vocabulary log you can review later.
+Your guild speaks Chinese and you want to keep up. Whats A Hanzi turns every Chinese word in your chat window into something you can hover: a card opens above the word, in the same typeface as the line, with the pinyin written over each character, the meaning, and the whole sentence with your word lit. Words you have seen often enough stop being coloured, so the chat itself shows you what you have learned. Press `K` on a word you know, `S` on one you want to keep.
 
 Only WoW: Forever (interface 16001) is supported.
 
-## Use
+## What it does
 
-- `/hanzi` toggles the pane (hidden by default). Drag it where you like.
-- `/hanzi chat off` stops linking words in the chat window; `/hanzi chat on` turns it back on.
-- `/hanzi test 你好` runs a line through the analyser without anyone having to say it.
-- `/hanzi size 26` sets the pane's text size (10 to 48; default 22).
-- `/hanzi font kai|arial|friz|hei` picks the font: `kai` (default) has every Chinese character and every tone letter but wide Latin; `arial` and `friz` are the usual UI fonts, tidy but without the third-tone letters (ǎ ǐ ǒ ǔ ǚ).
-- `/hanzi tones numbers` writes tones as numbers (`ni3 hao3`) so any font can show them; `/hanzi tones marks` goes back.
-- `/hanzi status` prints counters, the font in use and which fonts the client accepted; `/hanzi vocab` the vocabulary size; `/hanzi reset` the pane position.
+- **Hover any Chinese word** in guild, party, raid, whisper, say or channel chat for pinyin per character, tone colours and a short gloss, with the word underlined in the line itself.
+- **Watch your vocabulary grow**: new words take a soft colour, known ones take the chat's own colour, and the card counts how many words of the sentence you already know.
+- **Translations and game terms** appear on the card when the companion app runs on your PC: the sentence in English, a tag like "Ashenvale · zone", and notes on patterns such as the 被 passive.
 
-Inside dungeons, raids and battlegrounds the client hands addons chat text as a *secret value* that cannot be analysed; the pane then shows the line as is with an "instance" tag.
+## Install
 
-## Fonts
+Download the latest zip from [GitHub Releases](https://github.com/ParogDev/WhatsAHanzi/releases) and unpack it into `World of Warcraft\_forever_\Interface\AddOns\`. Open the game, and hover a Chinese word.
 
-The Forever client (1.60.1) refuses every font file shipped by an addon: `SetFont` returns false for any file under `Interface\AddOns`, whatever the font, while Blizzard's own fonts load. A subset of Noto Sans SC (OFL 1.1, see `LICENSES/OFL-NotoSansSC.txt`) stays in this repository and is tried first, for the day a client build accepts it; release zips leave it out (10 MB that would do nothing). Until then the pane uses Blizzard's ARKai (Han plus every tone letter, wide Latin) by default; `/hanzi font` and `/hanzi tones` are the way around its looks. `/hanzi status` tells you which font is in use and which the client accepted.
+## Commands
 
-## Data
+- `/hanzi options` opens the settings: channels, tone marks or numbers, card size, how many sightings make a word known.
+- `/hanzi test 你好` runs a line through the addon without anyone having to say it.
+- `/hanzi` opens the pane that lists every Chinese line with its pinyin; `/hanzi size 26` sets its text size.
+- `/hanzi font kai|hei|arial|friz` and `/hanzi tones numbers` change the look; `/hanzi status` shows what is in use.
 
-- Character readings: Unihan `kMandarin` (Unicode, Inc.; see `LICENSES/UNICODE.txt`).
-- Words and glosses: CC-CEDICT (CC-BY-SA 4.0; see `LICENSES/CC-CEDICT.txt`). The bundled list is trimmed; regenerate with the scaffolding repo's `/regen-dict`.
+What the client cannot do (instance chat, bundled fonts) is in `docs/limits.md`.
 
-## Development
+## Licences
 
-Part of the [WowForeverScaffolding](https://github.com/ParogDev/WowForeverScaffolding) workspace. `luacheck .`, `busted`, `stylua --check .` must be green; CI runs them on every push.
-
-MIT licence for the code.
+Code MIT. Readings from Unihan `kMandarin` (Unicode licence), glosses from CC-CEDICT (CC-BY-SA 4.0), Noto Sans SC under the OFL 1.1; the texts are in `LICENSES/`.

@@ -84,6 +84,37 @@ function Font.set(name)
 	return true
 end
 
+-- The file of the chat font's simplified-Chinese member (ARHei on this client): the engine draws a whole chat
+-- line in that member when the line holds Han, prefix included, so a card set in it matches the line.
+-- Records the probe in Font.probe.chatCJK (selftest.fontProbe); falls back to the known file name.
+function Font.chatCJK()
+	if Font._chatCJK then
+		return Font._chatCJK
+	end
+	local ok, member = pcall(function()
+		return ChatFontNormal:GetFontObjectForAlphabet("simplifiedchinese")
+	end)
+	local path
+	if ok and type(member) == "table" and member.GetFont then
+		path = member:GetFont()
+	end
+	local probe = { call = ok, member = tostring(member), path = tostring(path) }
+	if Font.probe then
+		Font.probe.chatCJK = probe
+	end
+	Font._chatCJK = path or "Fonts\\ARHei.ttf"
+	return Font._chatCJK
+end
+
+-- The hover card's font: the chat line's own CJK member, unless /hanzi font chose one the client accepted.
+function Font.card()
+	local want = ns.db and ns.db.ui and ns.db.ui.font
+	if want and Font.probe and Font.probe.byName[want] then
+		return Font.NAMED[want]
+	end
+	return Font.chatCJK()
+end
+
 -- Applies the current font to a FontString of ours, keeping its size.
 function Font.apply(fontString, height)
 	local path = Font.current()

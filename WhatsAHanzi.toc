@@ -12,10 +12,13 @@
 Han.lua
 Data\Pinyin.lua
 Data\Dict.lua
-Data\Inbox.lua
+Data\Local.lua
+Hash.lua
 Pinyin.lua
 Dict.lua
 Font.lua
+Card.lua
 UI.lua
 Chat.lua
+Options.lua
 Core.lua

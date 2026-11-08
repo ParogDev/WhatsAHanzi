@@ -7,6 +7,10 @@ ignore:
   - .stylua.toml
   - .busted
   - CHANGELOG.md
+  - docs
+  # The companion app's file: other people's chat, written on this PC only. The example documents the shape.
+  - Data/Local.lua
+  - Data/Local.example.lua
   # The Forever client refuses addon font files (README "Fonts"): keep the 10 MB Noto subset in the repo,
   # out of the release zip, until a client build accepts it. Font.detect() records the missing file as refused.
   - Fonts/NotoSansSC-Regular.ttf
