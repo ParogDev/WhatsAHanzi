@@ -6,10 +6,24 @@ ns.Dict = Dict
 
 local Han = ns.Han
 
+-- CEDICT entry for a word, simplified or traditional: Data.trad maps a traditional headword (歡迎) to the
+-- simplified key (欢迎) the entry is stored under. Returns the entry and, for a traditional word, its simplified form.
 local function entry(word)
 	local d = ns.Data and ns.Data.dict
-	return d and d[word] or nil
+	if not d then
+		return nil
+	end
+	local e = d[word]
+	if e then
+		return e
+	end
+	local simp = ns.Data.trad and ns.Data.trad[word]
+	if simp and d[simp] then
+		return d[simp], simp
+	end
+	return nil
 end
+Dict.entry = entry
 
 local function maxWordLen()
 	return (ns.Data and ns.Data.maxWordLen) or 1
