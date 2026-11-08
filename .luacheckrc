@@ -17,6 +17,9 @@ else
 		"CreateFrame", "UIParent", "GameTooltip", "ChatFontNormal", "DEFAULT_CHAT_FRAME",
 		"GetBuildInfo", "GetLocale", "WOW_PROJECT_ID", "C_AddOns", "C_Timer", "issecretvalue", "strsplit",
 		"strlenutf8", "date", "time", "geterrorhandler", "bit", "ChatFrameUtil", "GetCursorPosition",
+		-- CI in this repo runs standalone: every global the addon touches must be here as well.
+		"Settings", "InCombatLockdown", "C_GuildInfo", "IsShiftKeyDown", "IsControlKeyDown", "IsAltKeyDown",
+		"CreateSettingsListSectionHeaderInitializer", "WOW_PROJECT_CAMELOT", "SlashCmdList",
 	}
 end
 -- FrameXML globals the generated list doesn't carry (it is built from the C API lists).
