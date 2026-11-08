@@ -133,6 +133,24 @@ describe("Card", function()
 		assert.is_nil(ns.Card.ctx)
 	end)
 
+	it("escapes bars in companion text and strips colour codes from the sentence", function()
+		live.lines[line.hash].t = "a |cffff0000red|r bar | here"
+		local d = ns.Card.build(line, 3, live, {})
+		assert.equal("a |cffff0000red|r bar | here", d.translation.text)
+		local markup = ns.Card.sentenceMarkup({
+			{ word = "|cff00ff00gg|r ", han = false },
+			{ word = "你", han = true, lit = true },
+		})
+		assert.equal("|cff8a8a8agg |r|cff5ccbf2你|r", markup)
+	end)
+
+	it("ignores a cached line whose token is not the hovered word", function()
+		ns.Chat.lines.put(line.hash, { hash = line.hash, body = "x", tokens = { { word = "猎人", han = true } } })
+		ns.Card.enter(_G.ChatFrame1, "addon:WhatsAHanzi:" .. line.hash .. ":1", "灰谷", nil)
+		assert.is_nil(mock.lastError)
+		assert.equal("灰谷", ns.Card.ctx.line.tokens[ns.Card.ctx.index].word)
+	end)
+
 	it("falls back to the word alone when the line is not cached and not in the chat frame", function()
 		ns.Chat.lines.clear()
 		ns.Card.enter(_G.ChatFrame1, "addon:WhatsAHanzi:" .. line.hash .. ":3", "灰谷", nil)

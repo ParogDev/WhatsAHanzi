@@ -219,8 +219,12 @@ local function onSlash(input)
 		print(n .. " words in the vocabulary log (WhatsAHanziDB.vocab).")
 	elseif cmd == "reset" then
 		-- In place: the Settings panel holds a reference to ns.db.ui.
-		ns.db.ui.point = nil
+		for k in pairs(ns.db.ui) do
+			ns.db.ui[k] = nil
+		end
+		copyDefaults(ns.db.ui, defaults.ui)
 		ns.db.ui.hidden = false
+		ns.Vocab.version = ns.Vocab.version + 1
 		local f = ns.UI.get()
 		f:ClearAllPoints()
 		f:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT", 30, 260)

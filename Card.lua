@@ -117,14 +117,19 @@ end
 function Card.sentenceMarkup(sentence)
 	local parts = {}
 	for _, s in ipairs(sentence) do
+		-- Non-Han stretches may carry the line's own colour codes: drop them, escape any other bar.
+		local word = s.word
+		if not s.han then
+			word = (word:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", ""):gsub("|", "||"))
+		end
 		if s.lit then
-			parts[#parts + 1] = "|cff" .. ACCENT_HEX .. s.word .. "|r"
+			parts[#parts + 1] = "|cff" .. ACCENT_HEX .. word .. "|r"
 		elseif not s.han then
-			parts[#parts + 1] = "|cff8a8a8a" .. s.word .. "|r"
+			parts[#parts + 1] = "|cff8a8a8a" .. word .. "|r"
 		elseif s.known then
-			parts[#parts + 1] = "|cffd0d0d0" .. s.word .. "|r"
+			parts[#parts + 1] = "|cffd0d0d0" .. word .. "|r"
 		else
-			parts[#parts + 1] = "|cff8fb8cc" .. s.word .. "|r"
+			parts[#parts + 1] = "|cff8fb8cc" .. word .. "|r"
 		end
 	end
 	return table.concat(parts)
@@ -218,6 +223,22 @@ local function setFont(fs, size)
 	fs:SetFont(ns.Font.card(), size, "")
 end
 
+-- Offsets from OnHyperlinkEnter are in the chat FontString's scale; SetPoint and SetSize take the
+-- positioned frame's own scale (the card is scaled by cardScale, the highlight sits under UIParent).
+local function scaleRatio(region, frame)
+	local from = region and region.GetEffectiveScale and region:GetEffectiveScale() or 1
+	local to = frame.GetEffectiveScale and frame:GetEffectiveScale() or 1
+	if not (from and to) or to == 0 then
+		return 1
+	end
+	return from / to
+end
+
+-- Text from outside (companion data, dictionary glosses) must not open or close escape sequences.
+local function safe(s)
+	return (tostring(s or ""):gsub("|", "||"))
+end
+
 local function cardFrame()
 	if card then
 		return card
@@ -267,9 +288,10 @@ local function showHighlight(ctx)
 		highlight:Hide()
 		return
 	end
+	local r = scaleRatio(ctx.region, highlight)
 	highlight:ClearAllPoints()
-	highlight:SetPoint("BOTTOMLEFT", ctx.region, "BOTTOMLEFT", ctx.left, ctx.bottom)
-	highlight:SetSize(math.max(ctx.width, 1), math.max(ctx.height, 1))
+	highlight:SetPoint("BOTTOMLEFT", ctx.region, "BOTTOMLEFT", ctx.left * r, ctx.bottom * r)
+	highlight:SetSize(math.max(ctx.width * r, 1), math.max(ctx.height * r, 1))
 	showAnimated(highlight)
 end
 
@@ -286,7 +308,16 @@ local function onKeyDown(self, key)
 	local word = ctx.line.tokens[ctx.index].word
 	ns.Vocab.toggle(word, key == "K" and "known" or "star")
 	ns.selftest.counters.marks = (ns.selftest.counters.marks or 0) + 1
-	Card.show(ctx)
+	local ok, err = pcall(Card.show, ctx)
+	if not ok then
+		ns.selftest.lastError = "card: " .. tostring(err)
+		geterrorhandler()(err)
+	end
+end
+
+-- Key releases pass through the same way, so a key held across a hover is not left stuck.
+local function onKeyUp(self, key)
+	self:SetPropagateKeyboardInput(key ~= "K" and key ~= "S")
 end
 
 local function showKeys(on)
@@ -303,6 +334,12 @@ local function showKeys(on)
 		keys:SetPoint("CENTER")
 		keys:EnableKeyboard(true)
 		keys:SetScript("OnKeyDown", onKeyDown)
+		keys:SetScript("OnKeyUp", onKeyUp)
+		-- Combat starting mid-hover: give the keyboard back before SetPropagateKeyboardInput is protected.
+		keys:RegisterEvent("PLAYER_REGEN_DISABLED")
+		keys:SetScript("OnEvent", function(self)
+			self:Hide()
+		end)
 		keys:Hide()
 	end
 	if on then
@@ -371,22 +408,22 @@ function Card.show(ctx)
 
 	-- Gloss, or the game term.
 	if data.term then
-		row(13, "|cffffe08a" .. data.term.en .. "|r  |cff8a8a8a·|r  |cffb0b0b0" .. (data.term.kind or "") .. "|r", 6)
+		row(13, "|cffffe08a" .. safe(data.term.en) .. "|r  |cff8a8a8a·|r  |cffb0b0b0" .. safe(data.term.kind) .. "|r", 6)
 		if data.gloss then
-			row(12, data.gloss, 2, { 0.75, 0.75, 0.75 })
+			row(12, safe(data.gloss), 2, { 0.75, 0.75, 0.75 })
 		end
 	else
-		row(13, data.gloss or "|cff888888(no dictionary entry)|r", 6, { 0.92, 0.92, 0.92 })
+		row(13, data.gloss and safe(data.gloss) or "|cff888888(no dictionary entry)|r", 6, { 0.92, 0.92, 0.92 })
 	end
 
 	-- Translation from the companion, or the quiet state.
 	if data.translation then
 		local tr = data.translation
-		local chip = tr.model or "companion"
-		if tr.ctx and tr.ctx > 0 then
+		local chip = safe(tr.model or "companion")
+		if type(tr.ctx) == "number" and tr.ctx > 0 then
 			chip = chip .. " · " .. tr.ctx .. " lines of context"
 		end
-		row(13, "|cffe6e6e6" .. tr.text .. "|r  |cff6f8ea0" .. chip .. "|r", 8)
+		row(13, "|cffe6e6e6" .. safe(tr.text) .. "|r  |cff6f8ea0" .. chip .. "|r", 8)
 	else
 		row(12, "|cff6f8ea0not translated yet|r", 8)
 	end
@@ -400,7 +437,7 @@ function Card.show(ctx)
 
 	-- Pattern notes.
 	for _, p in ipairs(data.patterns) do
-		row(11, "|cffcf95ff" .. p.key .. "|r  |cffb0b0b0" .. p.note .. "|r", 3)
+		row(11, "|cffcf95ff" .. safe(p.key) .. "|r  |cffb0b0b0" .. safe(p.note) .. "|r", 3)
 	end
 
 	-- Stack the rows and size the card.
@@ -421,7 +458,8 @@ function Card.show(ctx)
 	-- Anchor: bottom-left just above the hovered word; else above the given frame; else the cursor.
 	c:ClearAllPoints()
 	if ctx.region and type(ctx.left) == "number" then
-		c:SetPoint("BOTTOMLEFT", ctx.region, "BOTTOMLEFT", ctx.left - PAD, ctx.bottom + ctx.height + 6)
+		local r = scaleRatio(ctx.region, c)
+		c:SetPoint("BOTTOMLEFT", ctx.region, "BOTTOMLEFT", ctx.left * r - PAD, (ctx.bottom + ctx.height) * r + 6)
 	elseif ctx.anchor then
 		c:SetPoint("BOTTOMLEFT", ctx.anchor, "TOPLEFT", 0, 4)
 	else
@@ -454,7 +492,9 @@ function Card.enter(chatFrame, link, text, region, left, bottom, width, height)
 		return
 	end
 	local line = ns.Chat.lines.get(hash)
-	if not (line and line.tokens[index]) then
+	-- A line rebuilt from the chat frame is numbered differently: trust the cache only when the token is
+	-- the hovered word.
+	if not (line and line.tokens[index] and line.tokens[index].word == text) then
 		local why
 		line, index = ns.Chat.lineForLink(chatFrame, link, text)
 		why = index
@@ -479,11 +519,16 @@ function Card.enter(chatFrame, link, text, region, left, bottom, width, height)
 	}
 	Card.ctx = ctx
 	st.counters.cards = (st.counters.cards or 0) + 1
-	local ok, err = pcall(Card.show, ctx)
+	local ok, data = pcall(Card.show, ctx)
 	if not ok then
-		st.lastError = "card: " .. tostring(err)
-		geterrorhandler()(err)
+		st.lastError = "card: " .. tostring(data)
+		geterrorhandler()(data)
 		return
+	end
+	-- The companion wrote lines but not this one: a hash mismatch shows up here, not as silence.
+	local live = ns.Data and ns.Data.live
+	if data and live and live.lines and next(live.lines) and not data.translation then
+		st.counters.liveMiss = (st.counters.liveMiss or 0) + 1
 	end
 	showHighlight(ctx)
 	showKeys(true)

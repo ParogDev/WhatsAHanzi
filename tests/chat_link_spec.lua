@@ -96,6 +96,16 @@ describe("Chat window links", function()
 		assert.equal(1, ns.selftest.counters.linked)
 	end)
 
+	it("recolours a repeated line after a word is marked known", function()
+		ns.Chat.hookChatFrames()
+		local f = mock.chatFilters.CHAT_MSG_GUILD
+		local _, before = f(nil, "CHAT_MSG_GUILD", "你好", "Bob")
+		assert.equal(NEW .. link("你好", 1, "你好") .. "|r", before)
+		ns.Vocab.toggle("你好", "known")
+		local _, after = f(nil, "CHAT_MSG_GUILD", "你好", "Bob")
+		assert.equal(link("你好", 1, "你好"), after)
+	end)
+
 	it("returns only false for lines it does not change, secrets, or when turned off", function()
 		ns.Chat.hookChatFrames()
 		local f = mock.chatFilters.CHAT_MSG_SAY

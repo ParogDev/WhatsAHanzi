@@ -115,6 +115,9 @@ function Options.register()
 	Settings.CreateSlider(category, scale, scaleOpts, "Scale of the card that opens over a hovered word.")
 
 	local known = addon("knownAfter", ui, "Number", "Known after", 8)
+	known:SetValueChangedCallback(function()
+		ns.Vocab.version = ns.Vocab.version + 1
+	end)
 	local knownOpts = Settings.CreateSliderOptions(3, 30, 1)
 	knownOpts:SetLabelFormatter(MinimalSliderWithSteppersMixin.Label.Right, whole)
 	Settings.CreateSlider(

@@ -188,8 +188,9 @@ function Chat.linkify(text)
 	return table.concat(out), line
 end
 
--- The same line reaches the filter once per chat frame that shows it: keep the last result.
-local lastIn, lastOut
+-- The same line reaches the filter once per chat frame that shows it: keep the last result. The known/new
+-- colour is baked into it, so the cache also keys on Vocab.version (bumped when a word changes state).
+local lastIn, lastOut, lastVersion
 function Chat.chatFilter(_, _, text, ...)
 	if ns.db and ns.db.ui.inChat == false then
 		return false
@@ -197,8 +198,9 @@ function Chat.chatFilter(_, _, text, ...)
 	if isSecret(text) then
 		return false
 	end
-	if text ~= lastIn then
-		lastIn, lastOut = text, Chat.linkify(text)
+	if text ~= lastIn or lastVersion ~= ns.Vocab.version then
+		lastIn, lastVersion = text, ns.Vocab.version
+		lastOut = Chat.linkify(text)
 		if lastOut then
 			ns.selftest.counters.linked = (ns.selftest.counters.linked or 0) + 1
 		end
@@ -329,10 +331,18 @@ local Vocab = {}
 ns.Vocab = Vocab
 
 Vocab.DEFAULT_KNOWN_AFTER = 8
+-- Bumped whenever a word's known state can have changed (a mark, a sighting that crosses the threshold,
+-- a new threshold); the chat filter's cache keys on it.
+Vocab.version = 0
+
+local function knownAfter()
+	return (ns.db and ns.db.ui and ns.db.ui.knownAfter) or Vocab.DEFAULT_KNOWN_AFTER
+end
 
 function Vocab.record(tokens, who)
 	local v = ns.db.vocab
 	local now = time()
+	local threshold = knownAfter()
 	for _, t in ipairs(tokens) do
 		if t.han then
 			local e = v[t.word]
@@ -341,6 +351,9 @@ function Vocab.record(tokens, who)
 				v[t.word] = e
 			end
 			e.n = e.n + 1
+			if e.n == threshold then
+				Vocab.version = Vocab.version + 1
+			end
 			e.last = now
 			e.by = who
 			ns.selftest.counters.words = ns.selftest.counters.words + 1
@@ -358,8 +371,7 @@ function Vocab.isKnown(word, vocab, knownAfter)
 	if e.known then
 		return true
 	end
-	knownAfter = knownAfter or (ns.db and ns.db.ui and ns.db.ui.knownAfter) or Vocab.DEFAULT_KNOWN_AFTER
-	return (e.n or 0) >= knownAfter
+	return (e.n or 0) >= (knownAfter or knownAfter())
 end
 
 -- Toggles a flag ("known" or "star") on a word's vocabulary entry, creating the entry if needed.
@@ -371,5 +383,6 @@ function Vocab.toggle(word, flag)
 		v[word] = e
 	end
 	e[flag] = not e[flag] or nil
+	Vocab.version = Vocab.version + 1
 	return e[flag] == true
 end
