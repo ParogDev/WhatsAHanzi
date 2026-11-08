@@ -249,3 +249,78 @@ describe("Card", function()
 		end
 	end)
 end)
+
+describe("Card.linkRects (a hovered word that wraps over chat rows)", function()
+	local ns, mock2
+	before_each(function()
+		mock2 = require("tests.wow_mock")
+		mock2.install()
+		ns = mock2.loadAddon(".")
+	end)
+
+	local LINK = "addon:WhatsAHanzi:ab12:3"
+	local TEXT = "[Guild] Ann: |cffaaaaaa|H" .. LINK .. "|h欢迎|h|r all"
+
+	-- A chat line FontString that reports the given areas for any span, recording the span it was asked.
+	local function region(text, areas)
+		local r = { asked = nil }
+		function r:GetText()
+			return text
+		end
+		function r:CalculateScreenAreaFromCharacterSpan(a, b)
+			self.asked = { a, b }
+			return areas
+		end
+		return r
+	end
+
+	it("returns one rect per row, top row first, for the link's byte span", function()
+		local r = region(TEXT, {
+			{ left = 0, bottom = 0, width = 14, height = 14 }, -- second row
+			{ left = 300, bottom = 14, width = 14, height = 14 }, -- first row
+		})
+		local rects, why = ns.Card.linkRects(r, LINK, 0, 0, 14, 14)
+		assert.is_nil(why)
+		assert.equal(2, #rects)
+		assert.equal(300, rects[1].left)
+		assert.equal(14, rects[1].bottom)
+		assert.equal(0, rects[2].left)
+		local s = TEXT:find("|H", 1, true)
+		assert.equal(s, r.asked[1])
+		assert.equal("|h", TEXT:sub(r.asked[2] - 1, r.asked[2]))
+		assert.same({ left = 0, bottom = 0, width = 314, height = 28 }, ns.Card.boundsOf(rects))
+	end)
+
+	it("returns the single row for a one-row link in a wrapped line", function()
+		local r = region(TEXT, { { left = 40, bottom = 0, width = 28, height = 14 } })
+		local rects = ns.Card.linkRects(r, LINK, 40, 0, 28, 14)
+		assert.same({ { left = 40, bottom = 0, width = 28, height = 14 } }, rects)
+	end)
+
+	it("falls back to OnHyperlinkEnter's bounds and names the broken link", function()
+		local fallback = { { left = 5, bottom = 6, width = 7, height = 8 } }
+		local rects, why = ns.Card.linkRects({}, LINK, 5, 6, 7, 8)
+		assert.same(fallback, rects)
+		assert.equal("no CalculateScreenAreaFromCharacterSpan", why)
+
+		rects, why = ns.Card.linkRects(region("no link here", {}), LINK, 5, 6, 7, 8)
+		assert.same(fallback, rects)
+		assert.equal("link not in line text", why)
+
+		mock2.secret[TEXT] = true
+		rects, why = ns.Card.linkRects(region(TEXT, {}), LINK, 5, 6, 7, 8)
+		assert.same(fallback, rects)
+		assert.equal("line text secret", why)
+		mock2.secret[TEXT] = nil
+
+		rects, why = ns.Card.linkRects(region(TEXT, {}), LINK, 5, 6, 7, 8)
+		assert.same(fallback, rects)
+		assert.equal("no screen area for the span", why)
+	end)
+
+	it("gives race and faction their own icons, the badge at its aspect ratio", function()
+		assert.are_not.equal(ns.Card.KIND_ATLAS.race, ns.Card.KIND_ATLAS.faction)
+		assert.equal("|A:UI-HUD-UnitFrame-Player-PVP-FFAIcon:14:9|a ", ns.Card.kindIcon("faction"))
+		assert.equal("|A:AlliedRace-UnlockingFrame-Male:14:16|a ", ns.Card.kindIcon("race"))
+	end)
+end)

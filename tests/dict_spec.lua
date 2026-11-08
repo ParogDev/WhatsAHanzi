@@ -119,6 +119,26 @@ describe("Dict and Pinyin", function()
 		assert.same({ en = "Ashenvale", kind = "zone" }, found.game)
 	end)
 
+	it("ships traditional headwords: 歡迎 and 公會 segment as words with their CEDICT entry", function()
+		local fresh = mock.loadAddon(".", { skipCore = true })
+		assert.equal("欢迎", fresh.Data.trad["歡迎"])
+		assert.equal("公会", fresh.Data.trad["公會"])
+		local t = fresh.Dict.segment("歡迎加入公會")
+		local words = {}
+		for _, tok in ipairs(t) do
+			words[#words + 1] = tok.word
+		end
+		assert.same({ "歡迎", "加入", "公會" }, words)
+		assert.equal("huān yíng", t[1].pinyin)
+		assert.is_true(t[1].inDict)
+		assert.equal("gōng huì", t[3].pinyin)
+		assert.truthy(t[3].gloss:find("guild", 1, true))
+		-- A lone traditional character resolves too, and a simplified key is never shadowed by an alias.
+		local e = fresh.Dict.entry("會")
+		assert.truthy(e)
+		assert.is_nil(fresh.Data.trad["乾"])
+	end)
+
 	it("keeps non-Han runs as tokens and builds the pinyin line", function()
 		local t = ns.Dict.segment("gg 你好 lfg 副本！")
 		assert.equal("gg nǐ hǎo lfg fù běn ！", ns.Dict.pinyinLine(t))
