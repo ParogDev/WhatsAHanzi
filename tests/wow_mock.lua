@@ -130,6 +130,9 @@ local function newFrame(_, name)
 	function f:IsShown()
 		return self._shown
 	end
+	function f:IsVisible()
+		return self._shown
+	end
 	function f:Show()
 		self._shown = true
 	end
@@ -274,6 +277,12 @@ function M.install()
 	_G.InCombatLockdown = function()
 		return M.inCombat == true
 	end
+	M.modifier = false
+	_G.IsShiftKeyDown = function()
+		return M.modifier
+	end
+	_G.IsControlKeyDown = _G.IsShiftKeyDown
+	_G.IsAltKeyDown = _G.IsShiftKeyDown
 	M.inCombat = false
 	M.chatFilters = {}
 	_G.ChatFrameUtil = {

@@ -108,10 +108,7 @@ describe("Card", function()
 		ns.Card.enter(_G.ChatFrame1, "addon:WhatsAHanzi:" .. line.hash .. ":3", "灰谷", region, 10, 2, 30, 14)
 		assert.is_nil(mock.lastError)
 		assert.equal(1, ns.selftest.counters.cards)
-		assert.same(
-			{ left = 10, bottom = 2, width = 30, height = 14, regionType = "Frame" },
-			ns.selftest.hoverBounds
-		)
+		assert.same({ left = 10, bottom = 2, width = 30, height = 14, regionType = "Frame" }, ns.selftest.hoverBounds)
 		local keys = _G["WhatsAHanziCardKeys"]
 		for _, f in ipairs(mock.frames) do
 			if f._name == "WhatsAHanziCardKeys" then
@@ -127,7 +124,17 @@ describe("Card", function()
 		assert.is_true(ns.db.vocab["灰谷"].star)
 		keys._OnKeyDown(keys, "ESCAPE")
 		assert.is_true(keys._propagate)
+		mock.modifier = true
+		keys._OnKeyDown(keys, "S") -- Shift+S is movement, not ours
+		assert.is_true(keys._propagate)
+		mock.modifier = false
 		assert.equal(2, ns.selftest.counters.marks)
+		-- K on a word known only by count marks it new again
+		ns.db.vocab["灰谷"] = { n = 20 }
+		assert.is_true(ns.Vocab.isKnown("灰谷"))
+		keys._OnKeyDown(keys, "K")
+		assert.is_false(ns.Vocab.isKnown("灰谷"))
+		assert.is_false(ns.db.vocab["灰谷"].known)
 		ns.Card.leave()
 		assert.is_false(keys:IsShown())
 		assert.is_nil(ns.Card.ctx)

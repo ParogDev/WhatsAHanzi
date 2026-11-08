@@ -149,13 +149,14 @@ describe("Chat window links", function()
 			left = true
 		end
 		local region = {}
-		mock.callbacks["ChatFrame.OnHyperlinkEnter"](nil, _G.ChatFrame1, "item:1234", "[x]", region, 1, 2, 3, 4)
+		-- the mock passes the owner itself; the arguments are Blizzard's (chatFrame, link, text, region, bounds)
+		mock.callbacks["ChatFrame.OnHyperlinkEnter"](_G.ChatFrame1, "item:1234", "[x]", region, 1, 2, 3, 4)
 		assert.is_nil(entered)
 		local _, line = ns.Chat.linkify("怒焰")
 		local lnk = "addon:WhatsAHanzi:" .. line.hash .. ":1"
-		mock.callbacks["ChatFrame.OnHyperlinkEnter"](nil, _G.ChatFrame1, lnk, "怒焰", region, 10, 20, 30, 40)
+		mock.callbacks["ChatFrame.OnHyperlinkEnter"](_G.ChatFrame1, lnk, "怒焰", region, 10, 20, 30, 40)
 		assert.same({ _G.ChatFrame1, lnk, "怒焰", region, 10, 20, 30, 40 }, entered)
-		mock.callbacks["ChatFrame.OnHyperlinkLeave"](nil)
+		mock.callbacks["ChatFrame.OnHyperlinkLeave"]()
 		assert.is_true(left)
 	end)
 

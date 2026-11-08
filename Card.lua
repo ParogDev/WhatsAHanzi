@@ -298,10 +298,22 @@ end
 -- Keyboard while hovering: K marks the word known, S stars it. A frame with keyboard input shown only
 -- during the hover; every other key passes through. Never in combat (SetPropagateKeyboardInput is
 -- protected there), so the frame simply stays hidden then.
+local function modifierDown()
+	return (IsShiftKeyDown and IsShiftKeyDown())
+		or (IsControlKeyDown and IsControlKeyDown())
+		or (IsAltKeyDown and IsAltKeyDown())
+end
+
 local function onKeyDown(self, key)
-	local mine = key == "K" or key == "S"
-	self:SetPropagateKeyboardInput(not mine)
 	local ctx = Card.ctx
+	-- The hovered line scrolled or its tab closed without a leave event: give the keyboard back.
+	if ctx and ctx.region and ctx.region.IsVisible and not ctx.region:IsVisible() then
+		self:SetPropagateKeyboardInput(true)
+		Card.leave()
+		return
+	end
+	local mine = (key == "K" or key == "S") and not modifierDown()
+	self:SetPropagateKeyboardInput(not mine)
 	if not (mine and ctx) then
 		return
 	end
@@ -411,7 +423,11 @@ function Card.show(ctx)
 
 	-- Gloss, or the game term.
 	if data.term then
-		row(13, "|cffffe08a" .. safe(data.term.en) .. "|r  |cff8a8a8a·|r  |cffb0b0b0" .. safe(data.term.kind) .. "|r", 6)
+		row(
+			13,
+			"|cffffe08a" .. safe(data.term.en) .. "|r  |cff8a8a8a·|r  |cffb0b0b0" .. safe(data.term.kind) .. "|r",
+			6
+		)
 		if data.gloss then
 			row(12, safe(data.gloss), 2, { 0.75, 0.75, 0.75 })
 		end
@@ -436,7 +452,8 @@ function Card.show(ctx)
 
 	-- Meter and key hints.
 	local meter = ("|cffb0b0b0known %d of %d|r"):format(data.meter.known, data.meter.total)
-	row(11, meter .. "   |cff5c6670K known · S star|r", 6)
+	local hint = (InCombatLockdown and InCombatLockdown()) and "" or "   |cff5c6670K known · S star|r"
+	row(11, meter .. hint, 6)
 
 	-- Pattern notes.
 	for _, p in ipairs(data.patterns) do
@@ -467,7 +484,7 @@ function Card.show(ctx)
 		c:SetPoint("BOTTOMLEFT", ctx.anchor, "TOPLEFT", 0, 4)
 	else
 		local cx, cy = GetCursorPosition()
-		local s = UIParent:GetEffectiveScale()
+		local s = c:GetEffectiveScale() -- cursor pixels into the card's own (scaled) units
 		c:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT", cx / s - 10, cy / s + 14)
 	end
 	-- A card still fading out (the last word was left a moment ago) is brought back, not re-hidden.

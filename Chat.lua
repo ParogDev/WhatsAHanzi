@@ -372,8 +372,9 @@ function Vocab.isKnown(word, vocab, knownAfter)
 	if not e then
 		return false
 	end
-	if e.known then
-		return true
+	-- An explicit mark wins either way: known = false keeps a frequently seen word "new".
+	if e.known ~= nil then
+		return e.known == true
 	end
 	return (e.n or 0) >= (knownAfter or thresholdSetting())
 end
@@ -386,9 +387,11 @@ function Vocab.toggle(word, flag)
 		e = { n = 0, first = time() }
 		v[word] = e
 	end
-	e[flag] = not e[flag] or nil
 	if flag == "known" then
+		e.known = not Vocab.isKnown(word)
 		Vocab.version = Vocab.version + 1
+	else
+		e[flag] = not e[flag] or nil
 	end
 	return e[flag] == true
 end
