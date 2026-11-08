@@ -146,8 +146,11 @@ local function acquireFS(card)
 		p.fs[p.nfs] = fs
 	end
 	fs:ClearAllPoints()
+	fs:SetText("")
 	fs:SetWidth(0)
+	fs:SetHeight(0)
 	fs:SetWordWrap(false)
+	fs:SetNonSpaceWrap(false)
 	fs:SetJustifyH("LEFT")
 	fs:SetTextColor(1, 1, 1)
 	fs:SetAlpha(1)
@@ -414,11 +417,15 @@ function Card.show(ctx)
 		x = x + m:GetStringWidth() + 6
 	end
 
+	-- Font first, then width and wrapping, then the text: GetStringWidth/Height are read after all three.
+	-- Chinese and escaped strings have no spaces: without non-space wrap the client truncates them to "...".
 	local function row(size, text, gap, color)
 		local fs = acquireFS(c)
 		setFont(fs, size)
 		fs:SetWidth(TEXT_WIDTH)
 		fs:SetWordWrap(true)
+		fs:SetNonSpaceWrap(true)
+		fs:SetMaxLines(0)
 		if color then
 			fs:SetTextColor(color[1], color[2], color[3])
 		end
