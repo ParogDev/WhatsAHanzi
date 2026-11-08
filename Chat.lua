@@ -25,6 +25,7 @@ Chat.EVENTS = {
 local function isSecret(v)
 	return issecretvalue ~= nil and issecretvalue(v)
 end
+Chat.isSecret = isSecret
 
 -- Short sender: "Name-Realm" -> "Name". Sender names are not secret, but guard anyway.
 local function shortName(name)
@@ -80,37 +81,91 @@ function Chat.register(frame)
 	end
 end
 
+-- Recent lines by hash, so a hovered link knows its whole sentence: Chat.lines[hash] = { hash, body,
+-- tokens }. Least recently used entry goes when the cache is full.
+Chat.LINES_MAX = 200
+local lines = { map = {}, count = 0, clock = 0 }
+Chat.lines = lines
+
+function lines.put(hash, line)
+	lines.clock = lines.clock + 1
+	line.tick = lines.clock
+	if not lines.map[hash] then
+		lines.count = lines.count + 1
+	end
+	lines.map[hash] = line
+	if lines.count > Chat.LINES_MAX then
+		local oldest, oldestTick
+		for h, l in pairs(lines.map) do
+			if not oldestTick or l.tick < oldestTick then
+				oldest, oldestTick = h, l.tick
+			end
+		end
+		lines.map[oldest] = nil
+		lines.count = lines.count - 1
+	end
+	return line
+end
+
+function lines.get(hash)
+	local line = lines.map[hash]
+	if line then
+		lines.clock = lines.clock + 1
+		line.tick = lines.clock
+	end
+	return line
+end
+
+function lines.clear()
+	lines.map, lines.count = {}, 0
+end
+
 -- In the normal chat window: a message filter wraps each Chinese word in an addon hyperlink
--- (|Haddon:WhatsAHanzi:<word>|h<word>|h, no colour code, so the line keeps its chat colour), and hovering
--- one shows the gloss popup at the cursor. Escapes already in the line (item and player links, textures,
--- atlases, Battle.net names) are copied untouched. Blizzard skips filters for secret text (canaccessvalue
--- in ChatFrameFilters.lua); the guard here is the second line of defence.
+-- (|Haddon:WhatsAHanzi:<lineHash>:<tokenIndex>|h<word>|h) and hovering one shows the card. Words not yet
+-- known take a soft link colour; known words keep the line's chat colour. Escapes already in the line
+-- (item and player links, textures, atlases, Battle.net names) are copied untouched. Blizzard skips filters
+-- for secret text (canaccessvalue in ChatFrameFilters.lua); the guard here is the second line of defence.
 Chat.LINK_PREFIX = "addon:WhatsAHanzi:"
+Chat.NEW_WORD_COLOR = "|cffb9e6ff"
 local ESCAPES = { "|H.-|h.-|h", "|T.-|t", "|A.-|a", "|K.-|k" }
 
-local function linkPlain(out, s)
+local function linkWord(out, hash, index, word)
+	local link = "|H" .. Chat.LINK_PREFIX .. hash .. ":" .. index .. "|h" .. word .. "|h"
+	if ns.Vocab.isKnown(word) then
+		out[#out + 1] = link
+	else
+		out[#out + 1] = Chat.NEW_WORD_COLOR .. link .. "|r"
+	end
+end
+
+-- Segments one plain stretch into the line's token list and writes the linked text to out.
+local function linkPlain(out, tokens, hash, s)
 	if s == "" then
 		return
 	end
 	if not ns.Han.hasHan(s) then
 		out[#out + 1] = s
+		tokens[#tokens + 1] = { word = s, han = false }
 		return
 	end
 	for _, t in ipairs(ns.Dict.segment(s)) do
+		tokens[#tokens + 1] = t
 		if t.han then
-			out[#out + 1] = "|H" .. Chat.LINK_PREFIX .. t.word .. "|h" .. t.word .. "|h"
+			linkWord(out, hash, #tokens, t.word)
 		else
 			out[#out + 1] = t.word
 		end
 	end
 end
 
--- Returns the line with every Han word linked, or nil when there is nothing to do (secret, no Han).
+-- Returns the line with every Han word linked and the cached line record, or nil when there is nothing to
+-- do (secret, no Han). The hash covers the text as the event delivered it, escapes included.
 function Chat.linkify(text)
 	if type(text) ~= "string" or isSecret(text) or not ns.Han.hasHan(text) then
 		return nil
 	end
-	local out, pos = {}, 1
+	local hash = ns.Hash.fnv1a32(text)
+	local out, tokens, pos = {}, {}, 1
 	while pos <= #text do
 		local s, e
 		for _, p in ipairs(ESCAPES) do
@@ -122,16 +177,20 @@ function Chat.linkify(text)
 		if not s then
 			break
 		end
-		linkPlain(out, text:sub(pos, s - 1))
-		out[#out + 1] = text:sub(s, e)
+		linkPlain(out, tokens, hash, text:sub(pos, s - 1))
+		local raw = text:sub(s, e)
+		out[#out + 1] = raw
+		tokens[#tokens + 1] = { word = Chat.plainText(raw) or raw, han = false, escape = true }
 		pos = e + 1
 	end
-	linkPlain(out, text:sub(pos))
-	return table.concat(out)
+	linkPlain(out, tokens, hash, text:sub(pos))
+	local line = lines.put(hash, { hash = hash, body = text, tokens = tokens })
+	return table.concat(out), line
 end
 
--- The same line reaches the filter once per chat frame that shows it: keep the last result.
-local lastIn, lastOut
+-- The same line reaches the filter once per chat frame that shows it: keep the last result. The known/new
+-- colour is baked into it, so the cache also keys on Vocab.version (bumped when a word changes state).
+local lastIn, lastOut, lastVersion
 function Chat.chatFilter(_, _, text, ...)
 	if ns.db and ns.db.ui.inChat == false then
 		return false
@@ -139,8 +198,9 @@ function Chat.chatFilter(_, _, text, ...)
 	if isSecret(text) then
 		return false
 	end
-	if text ~= lastIn then
-		lastIn, lastOut = text, Chat.linkify(text)
+	if text ~= lastIn or lastVersion ~= ns.Vocab.version then
+		lastIn, lastVersion = text, ns.Vocab.version
+		lastOut = Chat.linkify(text)
 		if lastOut then
 			ns.selftest.counters.linked = (ns.selftest.counters.linked or 0) + 1
 		end
@@ -151,13 +211,99 @@ function Chat.chatFilter(_, _, text, ...)
 	return false, lastOut, ...
 end
 
--- Word from one of our links, or nil for any other link.
-function Chat.wordFromLink(link)
-	if type(link) ~= "string" or link:sub(1, #Chat.LINK_PREFIX) ~= Chat.LINK_PREFIX then
+Chat.SYSTEM_EVENT = "CHAT_MSG_SYSTEM"
+
+-- The guild Message of the Day, for the companion: WhatsAHanziDB.motd = { text, hash, seen } when it has
+-- Han (GUILD_MOTD and login). Returns the record, or nil and why not.
+function Chat.rememberMOTD(text)
+	if text == nil and C_GuildInfo and C_GuildInfo.GetMOTD then
+		text = C_GuildInfo.GetMOTD() -- Forever: no GetGuildRosterMOTD global (GlobalAPI.lua)
+	end
+	if type(text) ~= "string" or isSecret(text) then
+		return nil, "motd absent or secret"
+	end
+	if not ns.Han.hasHan(text) then
+		return nil, "motd has no Han"
+	end
+	local rec = { text = text, hash = ns.Hash.fnv1a32(text), seen = time() }
+	ns.db.motd = rec
+	return rec
+end
+
+-- Hash and token index from one of our links; nil for any other link.
+function Chat.tokenFromLink(link)
+	if type(link) ~= "string" or isSecret(link) or link:sub(1, #Chat.LINK_PREFIX) ~= Chat.LINK_PREFIX then
 		return nil
 	end
-	local word = link:sub(#Chat.LINK_PREFIX + 1)
-	return word ~= "" and word or nil
+	local hash, index = link:match("^(%x+):(%d+)$", #Chat.LINK_PREFIX + 1)
+	if not hash then
+		return nil
+	end
+	return hash, tonumber(index)
+end
+
+-- The plain text of a displayed message: links to their text, colour codes and textures dropped.
+function Chat.plainText(msg)
+	if type(msg) ~= "string" or isSecret(msg) then
+		return nil
+	end
+	msg = msg:gsub("|H.-|h(.-)|h", "%1")
+		:gsub("|c%x%x%x%x%x%x%x%x", "")
+		:gsub("|r", "")
+		:gsub("|T.-|t", "")
+		:gsub("|A.-|a", "")
+		:gsub("|K.-|k", "")
+	return msg
+end
+
+-- The message body after a "[Channel] [Name]: " prefix (or the whole text when there is none).
+function Chat.messageBody(plain)
+	return plain:match("^%[.-%]%s*%[.-%]:%s*(.*)$") or plain:match("^%[.-%]:%s*(.*)$") or plain
+end
+
+-- Fallback for a link whose line is not cached (a line from before the last /reload): searches the chat
+-- frame's newest messages for the link and re-segments the body. Returns { hash, body, tokens }, index,
+-- or nil with the link that broke. The rebuilt body has no escapes, so it is cached under the link's hash
+-- only for this session's hovers; nothing is written for the companion.
+function Chat.lineForLink(chatFrame, link, word)
+	if not (chatFrame and chatFrame.GetMessageInfo) then
+		return nil, "chatFrame.GetMessageInfo missing"
+	end
+	local hash, linkIndex = Chat.tokenFromLink(link)
+	if isSecret(word) then
+		word = nil
+	end
+	local needle = "|H" .. link .. "|h"
+	for i = 1, 40 do
+		local msg = chatFrame:GetMessageInfo(i)
+		if msg == nil then
+			break
+		end
+		if not isSecret(msg) and msg:find(needle, 1, true) then
+			local body = Chat.messageBody(Chat.plainText(msg))
+			local tokens = ns.Dict.segment(body)
+			local index
+			if linkIndex and tokens[linkIndex] and tokens[linkIndex].word == word then
+				index = linkIndex
+			else
+				for k, t in ipairs(tokens) do
+					if t.han and t.word == word then
+						index = k
+						break
+					end
+				end
+			end
+			if not index then
+				return nil, "word not among the line's tokens"
+			end
+			local line = { hash = hash, body = body, tokens = tokens, rebuilt = true }
+			if hash and not lines.map[hash] then
+				lines.put(hash, line)
+			end
+			return line, index
+		end
+	end
+	return nil, "link not in the last 40 messages"
 end
 
 -- Hooks the chat window: the filter per event and the hover callbacks. Records in selftest.chatHook what
@@ -177,19 +323,29 @@ function Chat.hookChatFrames()
 		ChatFrameUtil.AddMessageEventFilter(ev, Chat.chatFilter)
 		hook.filters = hook.filters + 1
 	end
+	-- System lines too (the guild Message of the Day arrives this way): the filter links only lines with Han
+	-- and leaves every other system message untouched.
+	ChatFrameUtil.AddMessageEventFilter(Chat.SYSTEM_EVENT, Chat.chatFilter)
+	hook.filters = hook.filters + 1
 	if not (EventRegistry and EventRegistry.RegisterCallback) then
 		hook.error = "EventRegistry missing: words linked but hover shows nothing"
 		return hook
 	end
-	EventRegistry:RegisterCallback("ChatFrame.OnHyperlinkEnter", function(_, _, link)
-		local word = Chat.wordFromLink(link)
-		if word and ns.UI then
-			ns.UI.showGlossAtCursor(word)
-		end
-	end, Chat)
+	-- Blizzard passes the hovered link's FontString and the link's bounds inside it, measured from the
+	-- string's BOTTOMLEFT (Blizzard_ChatFrameBase/Shared/ChatFrame.lua: OnHyperlinkEnter; verified in game).
+	EventRegistry:RegisterCallback(
+		"ChatFrame.OnHyperlinkEnter",
+		function(_, chatFrame, link, text, region, left, bottom, width, height)
+			if not Chat.tokenFromLink(link) or not ns.Card then
+				return
+			end
+			ns.Card.enter(chatFrame, link, text, region, left, bottom, width, height)
+		end,
+		Chat
+	)
 	EventRegistry:RegisterCallback("ChatFrame.OnHyperlinkLeave", function()
-		if ns.UI then
-			ns.UI.hideGloss()
+		if ns.Card then
+			ns.Card.leave()
 		end
 	end, Chat)
 	hook.hover = true
@@ -200,9 +356,19 @@ end
 local Vocab = {}
 ns.Vocab = Vocab
 
+Vocab.DEFAULT_KNOWN_AFTER = 8
+-- Bumped whenever a word's known state can have changed (a mark, a sighting that crosses the threshold,
+-- a new threshold); the chat filter's cache keys on it.
+Vocab.version = 0
+
+local function thresholdSetting()
+	return (ns.db and ns.db.ui and ns.db.ui.knownAfter) or Vocab.DEFAULT_KNOWN_AFTER
+end
+
 function Vocab.record(tokens, who)
 	local v = ns.db.vocab
 	local now = time()
+	local threshold = thresholdSetting()
 	for _, t in ipairs(tokens) do
 		if t.han then
 			local e = v[t.word]
@@ -210,10 +376,45 @@ function Vocab.record(tokens, who)
 				e = { n = 0, first = now, pinyin = t.pinyin }
 				v[t.word] = e
 			end
+			local was = e.known or e.n >= threshold
 			e.n = e.n + 1
+			if not was and e.n >= threshold then
+				Vocab.version = Vocab.version + 1
+			end
 			e.last = now
 			e.by = who
 			ns.selftest.counters.words = ns.selftest.counters.words + 1
 		end
 	end
+end
+
+-- A word is known when the user marked it (K while hovering) or it was seen knownAfter times.
+function Vocab.isKnown(word, vocab, knownAfter)
+	vocab = vocab or (ns.db and ns.db.vocab)
+	local e = vocab and vocab[word]
+	if not e then
+		return false
+	end
+	-- An explicit mark wins either way: known = false keeps a frequently seen word "new".
+	if e.known ~= nil then
+		return e.known == true
+	end
+	return (e.n or 0) >= (knownAfter or thresholdSetting())
+end
+
+-- Toggles a flag ("known" or "star") on a word's vocabulary entry, creating the entry if needed.
+function Vocab.toggle(word, flag)
+	local v = ns.db.vocab
+	local e = v[word]
+	if not e then
+		e = { n = 0, first = time() }
+		v[word] = e
+	end
+	if flag == "known" then
+		e.known = not Vocab.isKnown(word)
+		Vocab.version = Vocab.version + 1
+	else
+		e[flag] = not e[flag] or nil
+	end
+	return e[flag] == true
 end

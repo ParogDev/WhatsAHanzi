@@ -3,13 +3,23 @@
 local ADDON, ns = ...
 WhatsAHanzi = ns -- the one global besides WhatsAHanziDB, for /dump and other addons
 
-local DB_VERSION = 2
+local DB_VERSION = 3
 
 local defaults = {
 	dbVersion = DB_VERSION,
 	channels = {}, -- event -> false to disable; absent = on
-	-- inChat: link Chinese words in the normal chat window for hover glosses (false turns it off).
-	ui = { hidden = true, inChat = true, point = nil, fontSize = 22, font = nil, tones = "marks" },
+	-- inChat: link Chinese words in the normal chat window for hover cards (false turns it off).
+	-- knownAfter: a word seen this many times counts as known; cardScale: the hover card's scale.
+	ui = {
+		hidden = true,
+		inChat = true,
+		point = nil,
+		fontSize = 22,
+		font = nil,
+		tones = "marks",
+		knownAfter = 8,
+		cardScale = 1,
+	},
 	vocab = {},
 	selftest = {},
 }
@@ -35,6 +45,14 @@ local migrations = {
 		if type(db.ui) == "table" then
 			db.ui.hidden = true
 		end
+	end,
+	-- 3: the hover card and known-word colouring arrive with their two settings.
+	[3] = function(db)
+		if type(db.ui) ~= "table" then
+			db.ui = {}
+		end
+		db.ui.knownAfter = db.ui.knownAfter or 8
+		db.ui.cardScale = db.ui.cardScale or 1
 	end,
 }
 
@@ -62,7 +80,10 @@ function ns.version()
 end
 
 -- Selftest: what the verify loop reads back after a /reload. Never contains secret values.
-local selftest = { counters = { lines = 0, secret = 0, chinese = 0, words = 0, linked = 0 }, lastLines = {} }
+local selftest = {
+	counters = { lines = 0, secret = 0, chinese = 0, words = 0, linked = 0, cards = 0, marks = 0 },
+	lastLines = {},
+}
 ns.selftest = selftest
 
 function selftest.remember(rec)
@@ -71,6 +92,19 @@ function selftest.remember(rec)
 	while #l > 20 do
 		table.remove(l, 1)
 	end
+end
+
+-- What the companion last wrote (Data/Local.lua), or nil when the file is absent or empty.
+function selftest.liveSummary()
+	local live = ns.Data and ns.Data.live
+	if not live then
+		return nil
+	end
+	local n = 0
+	for _ in pairs(live.lines or {}) do
+		n = n + 1
+	end
+	return { generatedAt = live.generatedAt, model = live.model, lines = n }
 end
 
 function selftest.snapshot(phase)
@@ -89,10 +123,14 @@ function selftest.snapshot(phase)
 		counters = selftest.counters,
 		dictWords = ns.Dict.count(),
 		pinyinChars = ns.Pinyin.count(),
-		inbox = ns.Data and ns.Data.inbox and ns.Data.inbox.generatedAt or nil,
+		live = selftest.liveSummary(),
 		lastLines = selftest.lastLines,
 		lastError = selftest.lastError,
 		chatHook = selftest.chatHook,
+		hoverBounds = selftest.hoverBounds,
+		motd = ns.db.motd and ns.db.motd.hash or nil,
+		cardLineMiss = selftest.cardLineMiss,
+		options = selftest.options,
 	}
 	ns.db.selftest = s
 	return s
@@ -151,7 +189,15 @@ local function onSlash(input)
 			ns.UI.applyFontSize()
 			print("font " .. rest .. " (" .. ns.Font.NAMED[rest] .. ")")
 		else
-			print("/hanzi font kai | arial | friz | hei | noto" .. (why and rest and (": " .. why) or ""))
+			print(
+				"/hanzi font kai | arial | friz | hei | noto (default: the chat line's own CJK font)"
+					.. (why and rest and (": " .. why) or "")
+			)
+		end
+	elseif cmd == "options" then
+		local ok, why = ns.Options.open()
+		if not ok then
+			print("|cffff6060" .. tostring(why) .. "|r")
 		end
 	elseif cmd == "tones" then
 		if rest == "marks" or rest == "numbers" then
@@ -173,14 +219,20 @@ local function onSlash(input)
 		end
 		print(n .. " words in the vocabulary log (WhatsAHanziDB.vocab).")
 	elseif cmd == "reset" then
-		ns.db.ui = { hidden = false }
+		-- In place: the Settings panel holds a reference to ns.db.ui.
+		for k in pairs(ns.db.ui) do
+			ns.db.ui[k] = nil
+		end
+		copyDefaults(ns.db.ui, defaults.ui)
+		ns.db.ui.hidden = false
+		ns.Vocab.version = ns.Vocab.version + 1
 		local f = ns.UI.get()
 		f:ClearAllPoints()
 		f:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT", 30, 260)
 		f:Show()
 	else
 		print(
-			"/hanzi  toggle | test <chinese text> | chat on|off | size <10-48> | font <name> | tones marks|numbers | status | vocab | reset"
+			"/hanzi  toggle | options | test <chinese text> | chat on|off | size <10-48> | font <name> | tones marks|numbers | status | vocab | reset"
 		)
 	end
 end
@@ -190,6 +242,7 @@ ns.frame = frame
 frame:RegisterEvent("ADDON_LOADED")
 frame:RegisterEvent("PLAYER_LOGIN")
 frame:RegisterEvent("PLAYER_LOGOUT")
+frame:RegisterEvent("GUILD_MOTD")
 frame:SetScript("OnEvent", function(self, event, ...)
 	if event == "ADDON_LOADED" then
 		if ... ~= ADDON then
@@ -200,8 +253,14 @@ frame:SetScript("OnEvent", function(self, event, ...)
 	elseif event == "PLAYER_LOGIN" then
 		selftest.loadedAt = date("%Y-%m-%d %H:%M:%S")
 		ns.Font.detect()
+		ns.Font.chatCJK()
 		ns.UI.get()
 		ns.Chat.register(self)
+		local okOpt, errOpt = pcall(ns.Options.register)
+		if not okOpt then
+			selftest.options = { error = "Options.register: " .. tostring(errOpt) }
+			geterrorhandler()(errOpt)
+		end
 		local ok, err = pcall(ns.Chat.hookChatFrames)
 		if not ok then
 			selftest.chatHook = { error = "hookChatFrames: " .. tostring(err) }
@@ -215,15 +274,18 @@ frame:SetScript("OnEvent", function(self, event, ...)
 				print("|cffff6060" .. hookErr .. "|r; showing the pane instead.")
 			end
 		end
+		ns.Chat.rememberMOTD()
 		selftest.snapshot("login")
 		SLASH_WHATSAHANZI1 = "/hanzi"
 		SLASH_WHATSAHANZI2 = "/wah"
 		SlashCmdList.WHATSAHANZI = onSlash
 		print(
-			"loaded. Hover Chinese words in chat for pinyin and meaning; /hanzi opens the pane, /hanzi test 你好 tries it."
+			"loaded. Hover a Chinese word in chat (K marks it known, S stars it); /hanzi options, /hanzi test 你好."
 		)
 	elseif event == "PLAYER_LOGOUT" then
 		selftest.snapshot("logout")
+	elseif event == "GUILD_MOTD" then
+		ns.Chat.rememberMOTD(...)
 	elseif event:sub(1, 9) == "CHAT_MSG_" then
 		ns.Chat.onEvent(self, event, ...)
 	end

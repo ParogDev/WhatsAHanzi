@@ -1,3 +1,5 @@
 .luacheckcache
 *.zip
 .release/
+# Written by the companion app on this PC: other people's chat, never committed.
+Data/Local.lua
