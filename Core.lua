@@ -136,6 +136,7 @@ function selftest.snapshot(phase)
 		chatHook = selftest.chatHook,
 		hoverBounds = selftest.hoverBounds,
 		motd = ns.db.motd and ns.db.motd.hash or nil,
+		motdLink = selftest.motdLink,
 		cardLineMiss = selftest.cardLineMiss,
 		options = selftest.options,
 	}
@@ -308,6 +309,11 @@ frame:SetScript("OnEvent", function(self, event, ...)
 			end
 		end
 		ns.Chat.rememberMOTD()
+		local okMotd, errMotd = pcall(ns.Chat.hookMOTD)
+		if not okMotd then
+			selftest.motdLink = { why = "hookMOTD: " .. tostring(errMotd) }
+			geterrorhandler()(errMotd)
+		end
 		selftest.snapshot("login")
 		SLASH_WHATSAHANZI1 = "/hanzi"
 		SLASH_WHATSAHANZI2 = "/wah"

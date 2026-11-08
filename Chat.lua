@@ -244,6 +244,64 @@ function Chat.rememberMOTD(text)
 	return rec
 end
 
+-- The MOTD never passes the message filters: the chat frame prints it itself (ChatFrameUtil.DisplayGMOTD ->
+-- chatFrame:AddMessage, on GUILD_MOTD and once per frame at login). So the printed line is rewritten in the
+-- frame's history afterwards (TransformMessages, the secure mixin's, safe from addon code). The body is
+-- linked on its own, so its hash is ns.db.motd.hash, the key the companion translates it under.
+-- Returns how many lines changed, or nil and why not.
+function Chat.relinkMOTD(chatFrame, gmotd)
+	if not (chatFrame and chatFrame.TransformMessages) then
+		return nil, "chat frame has no TransformMessages"
+	end
+	if type(gmotd) ~= "string" or isSecret(gmotd) or gmotd == "" then
+		return nil, "motd absent or secret"
+	end
+	if ns.db and ns.db.ui.inChat == false then
+		return nil, "words in chat turned off"
+	end
+	local linked = Chat.linkify(gmotd)
+	if not linked then
+		return nil, "motd has no Han"
+	end
+	local template = GUILD_MOTD_TEMPLATE or "Guild Message of the Day: %s"
+	local printed, replacement = template:format(gmotd), template:format(linked)
+	local n = 0
+	chatFrame:TransformMessages(function(message)
+		return type(message) == "string" and not isSecret(message) and message == printed
+	end, function(_, ...)
+		n = n + 1
+		return replacement, ...
+	end)
+	return n
+end
+
+-- Post-hooks DisplayGMOTD for MOTDs printed from now on, and relinks the one each frame printed already.
+-- Records { hooked, relinked, why } in selftest.motdLink.
+function Chat.hookMOTD()
+	local st = { relinked = 0 }
+	ns.selftest.motdLink = st
+	if not (ChatFrameUtil and ChatFrameUtil.DisplayGMOTD and hooksecurefunc) then
+		st.why = "ChatFrameUtil.DisplayGMOTD missing: MOTD not linked"
+		return st
+	end
+	hooksecurefunc(ChatFrameUtil, "DisplayGMOTD", function(chatFrame, gmotd)
+		local n, why = Chat.relinkMOTD(chatFrame, gmotd)
+		st.relinked = st.relinked + (n or 0)
+		st.why = why
+	end)
+	st.hooked = true
+	local gmotd = C_GuildInfo and C_GuildInfo.GetMOTD and C_GuildInfo.GetMOTD()
+	for i = 1, (NUM_CHAT_WINDOWS or 10) do
+		local f = _G["ChatFrame" .. i]
+		if f then
+			local n, why = Chat.relinkMOTD(f, gmotd)
+			st.relinked = st.relinked + (n or 0)
+			st.why = why
+		end
+	end
+	return st
+end
+
 -- Hash and token index from one of our links; nil for any other link.
 function Chat.tokenFromLink(link)
 	if type(link) ~= "string" or isSecret(link) or link:sub(1, #Chat.LINK_PREFIX) ~= Chat.LINK_PREFIX then
@@ -375,8 +433,8 @@ function Chat.hookChatFrames()
 		ChatFrameUtil.AddMessageEventFilter(ev, Chat.chatFilter)
 		hook.filters = hook.filters + 1
 	end
-	-- System lines too (the guild Message of the Day arrives this way): the filter links only lines with Han
-	-- and leaves every other system message untouched.
+	-- System lines too: the filter links only lines with Han and leaves every other system message untouched.
+	-- The guild Message of the Day is not one of them (Chat.hookMOTD).
 	ChatFrameUtil.AddMessageEventFilter(Chat.SYSTEM_EVENT, Chat.chatFilter)
 	hook.filters = hook.filters + 1
 	if not (EventRegistry and EventRegistry.RegisterCallback) then
