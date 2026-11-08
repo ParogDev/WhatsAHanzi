@@ -59,7 +59,7 @@ Card.KIND_ATLAS = {
 	boss = "DungeonSkull",
 	class = "Class",
 	race = "AlliedRace-UnlockingFrame-Male", -- a figure: the race, not a party
-	faction = "UI-HUD-UnitFrame-Player-PVP-FFAIcon", -- the neutral PvP badge: neither Alliance nor Horde
+	faction = "UI-HUD-UnitFrame-Player-PVP-FFAIcon", -- the free-for-all PvP badge: a faction icon that is neither side
 	profession = "Profession",
 	role = "UI-LFG-RoleIcon-Generic",
 	item = "bags-icon-equipment",
@@ -68,8 +68,9 @@ Card.KIND_ATLAS = {
 	meme = "communities-icon-chat",
 }
 
--- Atlases that are not square, drawn at their own aspect ratio (height 14): the PvP badge is 28x44.
-Card.KIND_ATLAS_WIDTH = { faction = 9 }
+-- Atlases that are not square, drawn at their own aspect ratio (height 14): the PvP badge is 28x44, the
+-- figure 35x31.
+Card.KIND_ATLAS_WIDTH = { faction = 9, race = 16 }
 
 -- "|A:poi-town:14:14|a " for a known kind, "" otherwise.
 function Card.kindIcon(kind)
@@ -123,8 +124,11 @@ function Card.linkRects(region, link, left, bottom, width, height)
 	if not rects[1] then
 		return fallback, "empty screen area"
 	end
-	table.sort(rects, function(a, b)
-		return a.bottom > b.bottom
+	table.sort(rects, function(a, b) -- top row first; left to right within a row (table.sort is not stable)
+		if a.bottom ~= b.bottom then
+			return a.bottom > b.bottom
+		end
+		return a.left < b.left
 	end)
 	return rects
 end
