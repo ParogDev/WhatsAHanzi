@@ -13,6 +13,7 @@ describe("Chat window links", function()
 		ns.Data.pinyin = { ["你"] = "nǐ", ["好"] = "hǎo", ["怒"] = "nù", ["焰"] = "yàn" }
 		ns.Data.dict = { ["你好"] = { "nǐ hǎo", "hello" }, ["怒焰"] = { "nù yàn", "Ragefire" } }
 		ns.Data.maxWordLen = 2
+		ns.Data.game = {}
 	end)
 
 	it("links each Chinese word with the line hash and token index, new words in the soft colour", function()
@@ -52,6 +53,7 @@ describe("Chat window links", function()
 
 	it("keeps the 200 most recently used lines", function()
 		ns.Chat.LINES_MAX = 3
+		ns.Chat.LINES_EVICT = 1
 		ns.Chat.linkify("你好 1")
 		ns.Chat.linkify("你好 2")
 		ns.Chat.linkify("你好 3")
@@ -61,6 +63,43 @@ describe("Chat window links", function()
 		assert.truthy(ns.Chat.lines.get(ns.Hash.fnv1a32("你好 1")))
 		assert.truthy(ns.Chat.lines.get(ns.Hash.fnv1a32("你好 4")))
 		assert.equal(3, ns.Chat.lines.count)
+	end)
+
+	it("evicts the least recently used lines in one scan per batch", function()
+		ns.Chat.LINES_MAX = 10
+		ns.Chat.LINES_EVICT = 4
+		for k = 1, 10 do
+			ns.Chat.linkify("你好 " .. k)
+		end
+		ns.Chat.lines.get(ns.Hash.fnv1a32("你好 2")) -- used again: survives the batch
+		assert.equal(0, ns.Chat.lines.scans)
+		ns.Chat.linkify("你好 11") -- 11 > 10: one scan drops the 4 least recently used (1, 3, 4, 5)
+		assert.equal(1, ns.Chat.lines.scans)
+		assert.equal(7, ns.Chat.lines.count)
+		for _, k in ipairs({ 1, 3, 4, 5 }) do
+			assert.is_nil(ns.Chat.lines.map[ns.Hash.fnv1a32("你好 " .. k)], "line " .. k)
+		end
+		for _, k in ipairs({ 2, 6, 7, 8, 9, 10, 11 }) do
+			assert.truthy(ns.Chat.lines.map[ns.Hash.fnv1a32("你好 " .. k)], "line " .. k)
+		end
+		for k = 12, 14 do -- back up to 10: no scan yet
+			ns.Chat.linkify("你好 " .. k)
+		end
+		assert.equal(1, ns.Chat.lines.scans)
+		assert.equal(10, ns.Chat.lines.count)
+		ns.Chat.linkify("你好 15")
+		assert.equal(2, ns.Chat.lines.scans)
+		assert.equal(7, ns.Chat.lines.count)
+	end)
+
+	it("never evicts the line just added, even with a batch larger than the cache", function()
+		ns.Chat.LINES_MAX = 2
+		ns.Chat.LINES_EVICT = 50
+		ns.Chat.linkify("你好 1")
+		ns.Chat.linkify("你好 2")
+		local _, newest = ns.Chat.linkify("你好 3")
+		assert.equal(1, ns.Chat.lines.count)
+		assert.equal(newest, ns.Chat.lines.get(newest.hash))
 	end)
 
 	it("leaves lines without Chinese, secrets and non-strings alone", function()
@@ -202,6 +241,52 @@ describe("Chat window links", function()
 		local none, why = ns.Chat.lineForLink(_G.ChatFrame1, "addon:WhatsAHanzi:00000000:1", "你好")
 		assert.is_nil(none)
 		assert.truthy(why:find("not in the last 40"))
+	end)
+
+	it("finds the hovered occurrence of a repeated word in a rebuilt line", function()
+		-- An item link with a Chinese name sits between them: the rebuilt body segments its text as well.
+		local out, line = ns.Chat.linkify("你好 |Hitem:1|h[你好]|h 你好 gg 你好")
+		local function positions(tokens)
+			local at = {}
+			for k, t in ipairs(tokens) do
+				if t.han and t.word == "你好" then
+					at[#at + 1] = k
+				end
+			end
+			return at
+		end
+		local cached = positions(line.tokens)
+		assert.equal(3, #cached)
+		local msg = "[Guild] [Bob]: " .. out
+		_G.ChatFrame1:AddMessage(msg)
+		local function hover(index)
+			ns.Chat.lines.clear()
+			return ns.Chat.lineForLink(_G.ChatFrame1, "addon:WhatsAHanzi:" .. line.hash .. ":" .. index, "你好")
+		end
+		-- Rebuilt body "你好 [你好] 你好 gg 你好": four 你好, the second from the item name. Each hovered link
+		-- still lands on its own word (rebuilt 1st, 3rd, 4th), never on the first or the item's.
+		local got = hover(cached[1])
+		assert.equal("你好 [你好] 你好 gg 你好", got.body)
+		local rebuilt = positions(got.tokens)
+		assert.equal(4, #rebuilt)
+		local want = { rebuilt[1], rebuilt[3], rebuilt[4] }
+		for n = 1, 3 do
+			local _, index = hover(cached[n])
+			assert.equal(want[n], index, "occurrence " .. n)
+		end
+	end)
+
+	it("measures the link's offset in the message body", function()
+		local A = L .. "ab:"
+		local msg = "[Guild] [Bob]: " .. A .. "1|h好|h |cffb9e6ff" .. A .. "2|h好|h|r"
+		assert.equal(0, ns.Chat.bodyOffset(msg, A .. "1|h"))
+		assert.equal(#"好 ", ns.Chat.bodyOffset(msg, A .. "2|h"))
+		assert.is_nil(ns.Chat.bodyOffset(msg, A .. "9|h")) -- not in the message
+		local tokens = { { word = "好", han = true }, { word = " ", han = false }, { word = "好", han = true } }
+		assert.equal(3, ns.Chat.tokenAt(tokens, #"好 ", "好"))
+		assert.is_nil(ns.Chat.tokenAt(tokens, 1, "好")) -- inside a token
+		assert.is_nil(ns.Chat.tokenAt(tokens, #"好 ", "你")) -- another word there
+		assert.equal(1, ns.Chat.firstWord(tokens, "好"))
 	end)
 
 	it("hides the pane once for players upgrading from version 1", function()

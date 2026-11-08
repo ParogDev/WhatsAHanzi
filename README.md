@@ -1,6 +1,6 @@
 # Whats A Hanzi
 
-Your guild speaks Chinese and you want to keep up. Whats A Hanzi turns every Chinese word in your chat window into something you can hover: a card opens above the word, in the same typeface as the line, with the pinyin written over each character, the meaning, and the whole sentence with your word lit. Words you have seen often enough stop being coloured, so the chat itself shows you what you have learned. Press `K` on a word you know, `S` on one you want to keep.
+Your guild speaks Chinese and you want to keep up. Whats A Hanzi turns every Chinese word in your chat window into something you can hover: a card opens above the word, in the same typeface as the line, with the pinyin written over each character, the meaning, and the whole sentence with your word lit. Words you have seen often enough stop being coloured, so the chat itself shows you what you have learned. Zone, dungeon, boss and item names show their English name (灰谷: Ashenvale · zone), and so does common guild slang. Turn on "K and S keys on the card" in Settings to press `K` on a word you know and `S` on one you want to keep.
 
 Only WoW: Forever (interface 16001) is supported.
 

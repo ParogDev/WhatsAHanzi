@@ -1,0 +1,18 @@
+Game names in Data/Game.lua
+
+The Chinese and English names of zones, dungeons, bosses, classes, races, factions,
+professions, items and spells in Data/Game.lua are the names World of Warcraft itself
+shows its players. They belong to Blizzard Entertainment, Inc. and are reproduced here
+only so that this addon can recognise them in chat and show the matching name in the
+other language, the same way localisation libraries such as LibBabble have done for
+years. No ownership of these names is claimed, and this file does not place them under
+the addon's own licence.
+
+The names were taken from the client's data tables as exported by https://wago.tools
+(build recorded at the top of Data/Game.lua). The player slang in the same table comes
+from companion/data/slang.yaml in the WowForeverScaffolding repository and is released
+under the addon's licence.
+
+World of Warcraft and Blizzard Entertainment are trademarks or registered trademarks of
+Blizzard Entertainment, Inc. in the U.S. and/or other countries. This addon is not
+affiliated with or endorsed by Blizzard Entertainment.

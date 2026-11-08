@@ -8,6 +8,7 @@ describe("Core and Chat", function()
 		ns.Data.pinyin = { ["你"] = "nǐ", ["好"] = "hǎo" }
 		ns.Data.dict = { ["你好"] = { "nǐ hǎo", "hello" } }
 		ns.Data.maxWordLen = 2
+		ns.Data.game = {}
 		ns.UI.addAnalysed = function() end
 		ns.UI.addRaw = function() end
 	end)

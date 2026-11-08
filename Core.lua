@@ -19,6 +19,7 @@ local defaults = {
 		tones = "marks",
 		knownAfter = 8,
 		cardScale = 1,
+		hoverKeys = false, -- K/S on an open card; opt-in so the card never takes keys the user bound
 	},
 	vocab = {},
 	selftest = {},
@@ -122,6 +123,8 @@ function selftest.snapshot(phase)
 		fontProbe = ns.Font and ns.Font.probe or nil,
 		counters = selftest.counters,
 		dictWords = ns.Dict.count(),
+		-- Data/Game.lua is a new TOC file: a /reload alone does not load it, only a client restart does.
+		gameTerms = ns.Dict.gameCount() or "Data/Game.lua not loaded (restart the client)",
 		pinyinChars = ns.Pinyin.count(),
 		live = selftest.liveSummary(),
 		lastLines = selftest.lastLines,
@@ -230,6 +233,8 @@ local function onSlash(input)
 		f:ClearAllPoints()
 		f:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT", 30, 260)
 		f:Show()
+		-- The Settings panel caches what it drew: tell each setting its value changed.
+		ns.Options.refresh()
 	else
 		print(
 			"/hanzi  toggle | options | test <chinese text> | chat on|off | size <10-48> | font <name> | tones marks|numbers | status | vocab | reset"
@@ -280,7 +285,7 @@ frame:SetScript("OnEvent", function(self, event, ...)
 		SLASH_WHATSAHANZI2 = "/wah"
 		SlashCmdList.WHATSAHANZI = onSlash
 		print(
-			"loaded. Hover a Chinese word in chat (K marks it known, S stars it); /hanzi options, /hanzi test 你好."
+			"loaded. Hover a Chinese word in chat; /hanzi options (K/S keys on the card are off until you turn them on), /hanzi test 你好."
 		)
 	elseif event == "PLAYER_LOGOUT" then
 		selftest.snapshot("logout")

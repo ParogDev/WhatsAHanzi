@@ -45,8 +45,13 @@ local pureBit = {
 	end,
 }
 
-local function newFontString()
-	local fs = setmetatable({ _font = nil, _size = 14, _text = "", _shown = true }, anyMethod)
+-- template: the inherited font object's name, which sets the font. Without one, SetText before SetFont or
+-- SetFontObject raises the client's "Font not set" error (seen in game, 2026-11-07).
+local function newFontString(template)
+	local fs = setmetatable({ _font = template, _size = 14, _text = "", _shown = true }, anyMethod)
+	function fs:SetFontObject(obj)
+		self._font = obj
+	end
 	function fs:SetFont(path, size)
 		if path:find("NotoSansCJK") or path:find("ARKai") or path:find("ARHei") or path:find("^Fonts\\") then
 			self._font, self._size = path, size
@@ -58,6 +63,9 @@ local function newFontString()
 		return self._font, self._size
 	end
 	function fs:SetText(t)
+		if rawget(self, "_font") == nil then -- rawget: anyMethod answers every missing key with noop
+			error("FontString:SetText(): Font not set", 2)
+		end
 		self._text = tostring(t or "")
 	end
 	function fs:GetText()
@@ -139,8 +147,8 @@ local function newFrame(_, name)
 	function f:Hide()
 		self._shown = false
 	end
-	function f:CreateFontString()
-		return newFontString()
+	function f:CreateFontString(_, _, template)
+		return newFontString(template)
 	end
 	function f:CreateTexture()
 		return setmetatable({}, anyMethod)
@@ -230,6 +238,13 @@ local function newSettings()
 		end
 		function setting:SetValueChangedCallback(fn)
 			self.callback = fn
+		end
+		-- Blizzard: re-reads the table and fires the value-changed callbacks; the mock counts the calls.
+		function setting:NotifyUpdate()
+			self.notified = (self.notified or 0) + 1
+			if self.callback then
+				self.callback(self, self.tbl[self.key])
+			end
 		end
 		S.registered[variable] = setting
 		return setting
@@ -393,6 +408,7 @@ function M.loadAddon(dir, opts)
 		"Han.lua",
 		"Data/Pinyin.lua",
 		"Data/Dict.lua",
+		"Data/Game.lua",
 		"Hash.lua",
 		"Pinyin.lua",
 		"Dict.lua",

@@ -26,6 +26,7 @@ describe("Card", function()
 			["我"] = { "wǒ", "I/me" },
 		}
 		ns.Data.maxWordLen = 2
+		ns.Data.game = {} -- the shipped glossary would tag 联盟, 猎人...; the game-term spec sets its own
 		local _, cached = ns.Chat.linkify("我在灰谷被联盟猎人射爆了")
 		line = cached
 		live = {
@@ -102,8 +103,48 @@ describe("Card", function()
 		assert.equal("|cffff7b7bhui1|r |cff7fb4ffgu3|r", ns.Card.coloredPinyin("huī gǔ"))
 	end)
 
+	local function keysFrame()
+		for _, f in ipairs(mock.frames) do
+			if f._name == "WhatsAHanziCardKeys" then
+				return f
+			end
+		end
+	end
+
+	it("never writes text into a FontString without a font (the client raises 'Font not set')", function()
+		assert.has_error(function()
+			CreateFrame("Frame"):CreateFontString(nil, "OVERLAY"):SetText("x")
+		end)
+		ns.Card.enter(_G.ChatFrame1, "addon:WhatsAHanzi:" .. line.hash .. ":3", "灰谷", nil, 10, 2, 30, 14)
+		assert.is_nil(ns.selftest.lastError)
+		assert.is_nil(mock.lastError)
+	end)
+
+	it("takes no keys while the K/S option is off (the default)", function()
+		assert.is_false(ns.db.ui.hoverKeys)
+		assert.is_false(ns.Card.keysEnabled())
+		local link = "addon:WhatsAHanzi:" .. line.hash .. ":3"
+		ns.Card.enter(_G.ChatFrame1, link, "灰谷", CreateFrame("Frame"), 10, 2, 30, 14)
+		assert.is_nil(mock.lastError)
+		assert.equal(1, ns.selftest.counters.cards)
+		local keys = keysFrame()
+		assert.is_true(keys == nil or not keys:IsShown())
+	end)
+
+	it("shows the game term from Data/Game.lua without the companion", function()
+		ns.Data.game = { ["灰谷"] = { "Ashenvale", "zone" } }
+		ns.Data.gameMaxLen = 6
+		local _, l = ns.Chat.linkify("我在灰谷被联盟猎人射爆了")
+		local d = ns.Card.build(l, 3, nil, {})
+		assert.same({ en = "Ashenvale", kind = "zone" }, d.term)
+		assert.equal("ash valley / Ashenvale (zone)", d.gloss) -- CEDICT's gloss stays as the second row
+		live.terms["灰谷"] = { "Ashenvale Forest", "zone" }
+		assert.equal("Ashenvale Forest", ns.Card.build(l, 3, live, {}).term.en) -- the companion's term wins
+	end)
+
 	it("lays the card out over the hovered word and marks words from the keyboard", function()
 		ns.Data.live = live
+		ns.db.ui.hoverKeys = true
 		local region = CreateFrame("Frame")
 		ns.Card.enter(_G.ChatFrame1, "addon:WhatsAHanzi:" .. line.hash .. ":3", "灰谷", region, 10, 2, 30, 14)
 		assert.is_nil(mock.lastError)

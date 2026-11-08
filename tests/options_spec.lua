@@ -11,7 +11,8 @@ describe("Options", function()
 		local cat = ns.Options.register()
 		assert.truthy(cat)
 		assert.equal(cat, _G.Settings.addonCategory)
-		assert.equal(4 + #ns.Chat.EVENTS, ns.selftest.options.settings)
+		assert.equal(5 + #ns.Chat.EVENTS, ns.selftest.options.settings)
+		assert.is_false(ns.db.ui.hoverKeys) -- K/S on the card is opt-in
 		assert.equal(1, ns.db.ui.cardScale)
 		assert.equal(8, ns.db.ui.knownAfter)
 		assert.is_true(ns.db.channels.CHAT_MSG_GUILD)
@@ -25,6 +26,21 @@ describe("Options", function()
 		assert.is_false(ns.db.channels.CHAT_MSG_SAY)
 		assert.is_nil(ns.frame._events.CHAT_MSG_SAY)
 		assert.is_true(ns.frame._events.CHAT_MSG_GUILD)
+	end)
+
+	it("refreshes every setting after /hanzi reset", function()
+		ns.Options.register()
+		ns.db.ui.cardScale = 1.3
+		ns.db.ui.hoverKeys = true
+		local version = ns.Vocab.version
+		ns.frame._OnEvent(ns.frame, "PLAYER_LOGIN") -- registers the slash command
+		_G.SlashCmdList.WHATSAHANZI("reset")
+		assert.equal(1, ns.db.ui.cardScale)
+		assert.is_false(ns.db.ui.hoverKeys)
+		for _, s in ipairs(ns.Options.settings) do
+			assert.equal(1, s.notified, s.variable)
+		end
+		assert.is_true(ns.Vocab.version > version)
 	end)
 
 	it("opens the panel from /hanzi options", function()

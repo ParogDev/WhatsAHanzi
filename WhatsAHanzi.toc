@@ -6,12 +6,13 @@
 ## SavedVariables: WhatsAHanziDB
 ## X-Game: forever
 ## X-Website: https://github.com/ParogDev/WhatsAHanzi
-## X-License: MIT (code); CC-BY-SA 4.0 (CC-CEDICT data); Unicode licence (Unihan data)
+## X-License: MIT (code); CC-BY-SA 4.0 (CC-CEDICT data); Unicode licence (Unihan data); game names are Blizzard's (LICENSES/GAME-TERMS-NOTICE.txt)
 ## IconTexture: Interface\Icons\INV_Misc_Book_09
 
 Han.lua
 Data\Pinyin.lua
 Data\Dict.lua
+Data\Game.lua
 Data\Local.lua
 Hash.lua
 Pinyin.lua

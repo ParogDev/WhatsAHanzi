@@ -70,6 +70,10 @@ function Card.build(line, index, live, vocab)
 		meter = { known = 0, total = 0 },
 		patterns = {},
 	}
+	-- A game name or slang term from Data/Game.lua; the companion's own term (below) replaces it.
+	if t.game then
+		data.term = { en = t.game.en, kind = t.game.kind }
+	end
 	for k, tok in ipairs(tokens) do
 		local known = tok.han and ns.Vocab.isKnown(tok.word, vocab) or false
 		data.sentence[k] = { word = tok.word, han = tok.han == true, lit = k == index, known = known }
@@ -142,7 +146,9 @@ local function acquireFS(card)
 	p.nfs = p.nfs + 1
 	local fs = p.fs[p.nfs]
 	if not fs then
-		fs = card:CreateFontString(nil, "OVERLAY")
+		-- Inherit a font object: a bare FontString has no font, and the SetText("") below would raise
+		-- "Font not set" (every card failed in game that way). setFont replaces it before any real text.
+		fs = card:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
 		p.fs[p.nfs] = fs
 	end
 	fs:ClearAllPoints()
@@ -298,9 +304,13 @@ local function showHighlight(ctx)
 	showAnimated(highlight)
 end
 
--- Keyboard while hovering: K marks the word known, S stars it. A frame with keyboard input shown only
--- during the hover; every other key passes through. Never in combat (SetPropagateKeyboardInput is
--- protected there), so the frame simply stays hidden then.
+-- Keyboard while hovering: K marks the word known, S stars it. Opt-in (ui.hoverKeys): off, the card takes no
+-- keyboard at all. On, a frame with keyboard input is shown only during the hover; every other key passes
+-- through. Never in combat (SetPropagateKeyboardInput is protected there), so the frame stays hidden then.
+function Card.keysEnabled()
+	return ns.db ~= nil and ns.db.ui ~= nil and ns.db.ui.hoverKeys == true
+end
+
 local function modifierDown()
 	return (IsShiftKeyDown and IsShiftKeyDown())
 		or (IsControlKeyDown and IsControlKeyDown())
@@ -345,6 +355,9 @@ local function onKeyUp(self, key)
 end
 
 local function showKeys(on)
+	if on and not Card.keysEnabled() then
+		on = false
+	end
 	if on and InCombatLockdown and InCombatLockdown() then
 		on = false
 	end
@@ -465,7 +478,9 @@ function Card.show(ctx)
 
 	-- Meter and key hints.
 	local meter = ("|cffb0b0b0known %d of %d|r"):format(data.meter.known, data.meter.total)
-	local hint = (InCombatLockdown and InCombatLockdown()) and "" or "   |cff5c6670K known · S star|r"
+	local hint = (Card.keysEnabled() and not (InCombatLockdown and InCombatLockdown()))
+			and "   |cff5c6670K known · S star|r"
+		or ""
 	row(11, meter .. hint, 6)
 
 	-- Pattern notes.
