@@ -231,6 +231,13 @@ local function newSettings()
 		function setting:SetValueChangedCallback(fn)
 			self.callback = fn
 		end
+		-- Blizzard: re-reads the table and fires the value-changed callbacks; the mock counts the calls.
+		function setting:NotifyUpdate()
+			self.notified = (self.notified or 0) + 1
+			if self.callback then
+				self.callback(self, self.tbl[self.key])
+			end
+		end
 		S.registered[variable] = setting
 		return setting
 	end
@@ -393,6 +400,7 @@ function M.loadAddon(dir, opts)
 		"Han.lua",
 		"Data/Pinyin.lua",
 		"Data/Dict.lua",
+		"Data/Game.lua",
 		"Hash.lua",
 		"Pinyin.lua",
 		"Dict.lua",
