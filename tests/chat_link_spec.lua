@@ -120,9 +120,36 @@ describe("Chat window links", function()
 		assert.same({ false }, { f(nil, "CHAT_MSG_SAY", "怒焰", "Bob") })
 	end)
 
+	it("links Chinese system lines (the guild MOTD) and leaves other system lines alone", function()
+		ns.Chat.hookChatFrames()
+		local f = mock.chatFilters.CHAT_MSG_SYSTEM
+		assert.is_function(f)
+		local _, text = f(nil, "CHAT_MSG_SYSTEM", "Guild Message of the Day: 你好", 1)
+		assert.equal(
+			"Guild Message of the Day: " .. NEW .. link("Guild Message of the Day: 你好", 2, "你好") .. "|r",
+			text
+		)
+		assert.same({ false }, { f(nil, "CHAT_MSG_SYSTEM", "You have joined the channel.", 1) })
+	end)
+
+	it("remembers a Chinese MOTD for the companion", function()
+		assert.is_nil(ns.Chat.rememberMOTD("Welcome to the guild"))
+		assert.is_nil(ns.db.motd)
+		mock.motd = "欢迎 all"
+		local rec = ns.Chat.rememberMOTD()
+		assert.equal("欢迎 all", rec.text)
+		assert.equal(ns.Hash.fnv1a32("欢迎 all"), rec.hash)
+		assert.equal(rec, ns.db.motd)
+		assert.is_number(rec.seen)
+		local secret = "欢迎"
+		mock.secret[secret] = true
+		assert.is_nil(ns.Chat.rememberMOTD(secret))
+		assert.equal(rec, ns.db.motd)
+	end)
+
 	it("records the hook in the selftest", function()
 		local hook = ns.Chat.hookChatFrames()
-		assert.equal(#ns.Chat.EVENTS, hook.filters)
+		assert.equal(#ns.Chat.EVENTS + 1, hook.filters)
 		assert.is_true(hook.hover)
 		assert.is_nil(hook.error)
 		assert.equal(hook, ns.selftest.chatHook)

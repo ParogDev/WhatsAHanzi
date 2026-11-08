@@ -211,6 +211,25 @@ function Chat.chatFilter(_, _, text, ...)
 	return false, lastOut, ...
 end
 
+Chat.SYSTEM_EVENT = "CHAT_MSG_SYSTEM"
+
+-- The guild Message of the Day, for the companion: WhatsAHanziDB.motd = { text, hash, seen } when it has
+-- Han (GUILD_MOTD and login). Returns the record, or nil and why not.
+function Chat.rememberMOTD(text)
+	if text == nil and C_GuildInfo and C_GuildInfo.GetMOTD then
+		text = C_GuildInfo.GetMOTD() -- Forever: no GetGuildRosterMOTD global (GlobalAPI.lua)
+	end
+	if type(text) ~= "string" or isSecret(text) then
+		return nil, "motd absent or secret"
+	end
+	if not ns.Han.hasHan(text) then
+		return nil, "motd has no Han"
+	end
+	local rec = { text = text, hash = ns.Hash.fnv1a32(text), seen = time() }
+	ns.db.motd = rec
+	return rec
+end
+
 -- Hash and token index from one of our links; nil for any other link.
 function Chat.tokenFromLink(link)
 	if type(link) ~= "string" or isSecret(link) or link:sub(1, #Chat.LINK_PREFIX) ~= Chat.LINK_PREFIX then
@@ -304,6 +323,10 @@ function Chat.hookChatFrames()
 		ChatFrameUtil.AddMessageEventFilter(ev, Chat.chatFilter)
 		hook.filters = hook.filters + 1
 	end
+	-- System lines too (the guild Message of the Day arrives this way): the filter links only lines with Han
+	-- and leaves every other system message untouched.
+	ChatFrameUtil.AddMessageEventFilter(Chat.SYSTEM_EVENT, Chat.chatFilter)
+	hook.filters = hook.filters + 1
 	if not (EventRegistry and EventRegistry.RegisterCallback) then
 		hook.error = "EventRegistry missing: words linked but hover shows nothing"
 		return hook

@@ -128,6 +128,7 @@ function selftest.snapshot(phase)
 		lastError = selftest.lastError,
 		chatHook = selftest.chatHook,
 		hoverBounds = selftest.hoverBounds,
+		motd = ns.db.motd and ns.db.motd.hash or nil,
 		cardLineMiss = selftest.cardLineMiss,
 		options = selftest.options,
 	}
@@ -241,6 +242,7 @@ ns.frame = frame
 frame:RegisterEvent("ADDON_LOADED")
 frame:RegisterEvent("PLAYER_LOGIN")
 frame:RegisterEvent("PLAYER_LOGOUT")
+frame:RegisterEvent("GUILD_MOTD")
 frame:SetScript("OnEvent", function(self, event, ...)
 	if event == "ADDON_LOADED" then
 		if ... ~= ADDON then
@@ -272,6 +274,7 @@ frame:SetScript("OnEvent", function(self, event, ...)
 				print("|cffff6060" .. hookErr .. "|r; showing the pane instead.")
 			end
 		end
+		ns.Chat.rememberMOTD()
 		selftest.snapshot("login")
 		SLASH_WHATSAHANZI1 = "/hanzi"
 		SLASH_WHATSAHANZI2 = "/wah"
@@ -281,6 +284,8 @@ frame:SetScript("OnEvent", function(self, event, ...)
 		)
 	elseif event == "PLAYER_LOGOUT" then
 		selftest.snapshot("logout")
+	elseif event == "GUILD_MOTD" then
+		ns.Chat.rememberMOTD(...)
 	elseif event:sub(1, 9) == "CHAT_MSG_" then
 		ns.Chat.onEvent(self, event, ...)
 	end

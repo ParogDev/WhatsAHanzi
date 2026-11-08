@@ -277,6 +277,12 @@ function M.install()
 	_G.InCombatLockdown = function()
 		return M.inCombat == true
 	end
+	M.motd = nil
+	_G.C_GuildInfo = {
+		GetMOTD = function()
+			return M.motd
+		end,
+	}
 	M.modifier = false
 	_G.IsShiftKeyDown = function()
 		return M.modifier
