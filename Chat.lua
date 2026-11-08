@@ -82,10 +82,31 @@ function Chat.register(frame)
 end
 
 -- Recent lines by hash, so a hovered link knows its whole sentence: Chat.lines[hash] = { hash, body,
--- tokens }. Least recently used entry goes when the cache is full.
+-- tokens }. When the cache passes LINES_MAX, one scan drops the least recently used LINES_EVICT entries, so a
+-- busy channel pays for a full scan once every LINES_EVICT new lines rather than on every line.
 Chat.LINES_MAX = 200
-local lines = { map = {}, count = 0, clock = 0 }
+Chat.LINES_EVICT = 50
+local lines = { map = {}, count = 0, clock = 0, scans = 0 }
 Chat.lines = lines
+
+local function byTick(a, b)
+	return a.tick < b.tick
+end
+
+function lines.evict()
+	local all = {}
+	for h, l in pairs(lines.map) do
+		all[#all + 1] = { hash = h, tick = l.tick }
+	end
+	table.sort(all, byTick)
+	-- The newest entry (highest tick, sorted last) always stays.
+	local drop = math.max(1, math.min(Chat.LINES_EVICT, #all - 1))
+	for k = 1, drop do
+		lines.map[all[k].hash] = nil
+	end
+	lines.count = lines.count - drop
+	lines.scans = lines.scans + 1
+end
 
 function lines.put(hash, line)
 	lines.clock = lines.clock + 1
@@ -95,14 +116,7 @@ function lines.put(hash, line)
 	end
 	lines.map[hash] = line
 	if lines.count > Chat.LINES_MAX then
-		local oldest, oldestTick
-		for h, l in pairs(lines.map) do
-			if not oldestTick or l.tick < oldestTick then
-				oldest, oldestTick = h, l.tick
-			end
-		end
-		lines.map[oldest] = nil
-		lines.count = lines.count - 1
+		lines.evict()
 	end
 	return line
 end
@@ -261,6 +275,46 @@ function Chat.messageBody(plain)
 	return plain:match("^%[.-%]%s*%[.-%]:%s*(.*)$") or plain:match("^%[.-%]:%s*(.*)$") or plain
 end
 
+-- Where the hovered link starts inside the message body, as a byte offset into Chat.messageBody(plainText(msg))
+-- (0 = the body's first byte), or nil. Everything before the link is reduced the same way the body is, so the
+-- offset survives escapes and item links with Chinese names before it.
+function Chat.bodyOffset(msg, needle)
+	local at = msg:find(needle, 1, true)
+	if not at then
+		return nil
+	end
+	local plain = Chat.plainText(msg)
+	local before = Chat.plainText(msg:sub(1, at - 1))
+	local offset = #before - (#plain - #Chat.messageBody(plain))
+	return offset >= 0 and offset or nil
+end
+
+-- Index of the Han token for word that starts at byte offset in the body the tokens were cut from, or nil.
+-- A repeated word ("走 走", "好好") then maps to its own position, not the first one.
+function Chat.tokenAt(tokens, offset, word)
+	local pos = 0
+	for k, t in ipairs(tokens) do
+		if pos == offset then
+			return (t.han and t.word == word) and k or nil
+		end
+		if pos > offset then
+			return nil
+		end
+		pos = pos + #t.word
+	end
+	return nil
+end
+
+-- Index of the first Han token whose word is word, or nil.
+function Chat.firstWord(tokens, word)
+	for k, t in ipairs(tokens) do
+		if t.han and t.word == word then
+			return k
+		end
+	end
+	return nil
+end
+
 -- Fallback for a link whose line is not cached (a line from before the last /reload): searches the chat
 -- frame's newest messages for the link and re-segments the body. Returns { hash, body, tokens }, index,
 -- or nil with the link that broke. The rebuilt body has no escapes, so it is cached under the link's hash
@@ -282,17 +336,15 @@ function Chat.lineForLink(chatFrame, link, word)
 		if not isSecret(msg) and msg:find(needle, 1, true) then
 			local body = Chat.messageBody(Chat.plainText(msg))
 			local tokens = ns.Dict.segment(body)
-			local index
-			if linkIndex and tokens[linkIndex] and tokens[linkIndex].word == word then
+			-- The rebuilt body has no escapes, so the link's index may point at another token, or at another
+			-- occurrence of a repeated word: the link's byte position in the body decides. Re-segmenting can
+			-- cut words differently; then the link's index if it still fits, else the first occurrence.
+			local offset = word and Chat.bodyOffset(msg, needle)
+			local index = offset and Chat.tokenAt(tokens, offset, word)
+			if not index and linkIndex and tokens[linkIndex] and tokens[linkIndex].word == word then
 				index = linkIndex
-			else
-				for k, t in ipairs(tokens) do
-					if t.han and t.word == word then
-						index = k
-						break
-					end
-				end
 			end
+			index = index or Chat.firstWord(tokens, word)
 			if not index then
 				return nil, "word not among the line's tokens"
 			end

@@ -6,6 +6,7 @@ local Options = {}
 ns.Options = Options
 
 Options.TITLE = "Whats A Hanzi"
+Options.settings = {} -- every registered setting, for Options.refresh
 
 -- Display names for Chat.EVENTS; the channel list is one checkbox per event.
 Options.CHANNEL_NAMES = {
@@ -95,7 +96,9 @@ function Options.register()
 	local function addon(key, tbl, kind, name, default)
 		st.settings = st.settings + 1
 		local varType = Settings.VarType[kind]
-		return Settings.RegisterAddOnSetting(category, "WAH_" .. key, key, tbl, varType, name, default)
+		local s = Settings.RegisterAddOnSetting(category, "WAH_" .. key, key, tbl, varType, name, default)
+		Options.settings[#Options.settings + 1] = s
+		return s
 	end
 
 	local inChat = addon("inChat", ui, "Boolean", "Words in chat linked", true)
@@ -124,7 +127,15 @@ function Options.register()
 		category,
 		known,
 		knownOpts,
-		"A word seen this many times counts as known: no link colour in chat. K while hovering marks one by hand."
+		"A word seen this many times counts as known: no link colour in chat."
+	)
+
+	local keys = addon("hoverKeys", ui, "Boolean", "K and S keys on the card", false)
+	Settings.CreateCheckbox(
+		category,
+		keys,
+		"While a card is open, K marks the word known and S stars it. Off by default: the card then takes no keys, "
+			.. "so K and S stay with your own bindings."
 	)
 
 	if layout and CreateSettingsListSectionHeaderInitializer then
@@ -147,6 +158,19 @@ function Options.register()
 	Settings.RegisterAddOnCategory(category)
 	st.registered = true
 	return category
+end
+
+-- After the values changed behind the panel's back (/hanzi reset): each setting re-reads its table and the
+-- open panel redraws its controls. Returns how many settings were told.
+function Options.refresh()
+	local n = 0
+	for _, s in ipairs(Options.settings) do
+		if s.NotifyUpdate then
+			s:NotifyUpdate()
+			n = n + 1
+		end
+	end
+	return n
 end
 
 -- /hanzi options
