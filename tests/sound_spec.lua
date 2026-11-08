@@ -133,19 +133,35 @@ describe("Sound", function()
 	end)
 
 	describe("speak", function()
-		it("chains one file per syllable, GAP seconds apart", function()
+		it("chains one file per syllable at each file's length", function()
 			local delays = {}
 			_G.C_Timer.After = function(d, fn)
 				delays[#delays + 1] = d
 				fn()
 			end
+			ns.Data.soundMs = { dui4 = 600, bu5 = 430 } -- qi3 has no length: it is last, so none is needed
 			ns.Sound.probe()
 			played = {}
 			assert.same({ "dui4", "bu5", "qi3" }, ns.Sound.speak("duì bu qǐ"))
 			assert.equal(3, #played)
 			assert.equal("Interface\\AddOns\\WhatsAHanzi\\Sounds\\dui4.ogg", played[1].path)
 			assert.equal("Interface\\AddOns\\WhatsAHanzi\\Sounds\\qi3.ogg", played[3].path)
-			assert.same({ ns.Sound.GAP, 2 * ns.Sound.GAP }, delays)
+			assert.equal(2, #delays)
+			assert.is_true(math.abs(delays[1] - 0.57) < 1e-9)
+			assert.is_true(math.abs(delays[2] - 0.97) < 1e-9)
+			assert.equal(ns.Sound.GAP, ns.Sound.length("zzz1"))
+		end)
+
+		it("has a length in Data/SoundLengths.lua for every bank file", function()
+			local missing = {}
+			for _, py in pairs(ns.Data.pinyin) do
+				for _, name in ipairs(ns.Sound.names(py)) do
+					if not ns.Data.soundMs[name] then
+						missing[name] = true
+					end
+				end
+			end
+			assert.same({}, missing)
 		end)
 
 		it("drops the queued syllables of a word when the next one starts", function()

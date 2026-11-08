@@ -409,6 +409,7 @@ function M.loadAddon(dir, opts)
 		"Data/Pinyin.lua",
 		"Data/Dict.lua",
 		"Data/Game.lua",
+		"Data/SoundLengths.lua",
 		"Hash.lua",
 		"Pinyin.lua",
 		"Dict.lua",

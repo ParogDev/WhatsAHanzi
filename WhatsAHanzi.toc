@@ -13,6 +13,7 @@ Han.lua
 Data\Pinyin.lua
 Data\Dict.lua
 Data\Game.lua
+Data\SoundLengths.lua
 Data\Local.lua
 Hash.lua
 Pinyin.lua

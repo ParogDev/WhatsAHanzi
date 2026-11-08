@@ -8,7 +8,7 @@ ns.Sound = Sound
 
 Sound.DIR = "Interface\\AddOns\\" .. ADDON .. "\\Sounds\\"
 Sound.CHANNEL = "Master"
-Sound.GAP = 0.42 -- seconds between syllables; the files are 409 to 463 ms
+Sound.GAP = 0.55 -- seconds between syllables when Data/SoundLengths.lua has no length for the file
 Sound.DELAY = 0.25 -- a hover held this long speaks, so sweeping the mouse across a line stays quiet
 
 -- The companion's syllable grammar (wah/audio.py _SYLLABLE): an optional initial, then one of these finals.
@@ -156,6 +156,18 @@ local function playOne(name, gen)
 	end
 end
 
+Sound.OVERLAP = 0.03 -- each file has 15 ms of padding at both ends: the next syllable starts inside it
+
+-- Seconds until the syllable after `name` starts: the file's length (Data/SoundLengths.lua) less the overlap,
+-- or Sound.GAP when the table has no entry.
+function Sound.length(name)
+	local ms = ns.Data and ns.Data.soundMs and ns.Data.soundMs[name]
+	if type(ms) ~= "number" then
+		return Sound.GAP
+	end
+	return math.max(ms / 1000 - Sound.OVERLAP, 0.1)
+end
+
 -- Speaks a reading ("nǐ hǎo"). Returns the bank names queued, or nil and why nothing plays.
 function Sound.speak(reading)
 	local ok, why = Sound.ready()
@@ -169,9 +181,11 @@ function Sound.speak(reading)
 	Sound.stop()
 	local gen = generation
 	playOne(names[1], gen)
+	local at = 0
 	for i = 2, #names do
 		local name = names[i]
-		C_Timer.After((i - 1) * Sound.GAP, function()
+		at = at + Sound.length(names[i - 1])
+		C_Timer.After(at, function()
 			playOne(name, gen)
 		end)
 	end
