@@ -324,15 +324,21 @@ function Chat.relinkAllMOTD(gmotd, print)
 		st.why = why
 		return 0
 	end
-	local n, shownAlready = 0, 0
+	-- One reason for the whole pass: the first frame's refusal, nil when any frame could be searched.
+	local n, shownAlready, searched, firstWhy = 0, 0, false, nil
 	for _, f in ipairs(chatFrames()) do
 		local got, whyNot, present = Chat.relinkMOTD(f, gmotd)
 		n = n + (got or 0)
 		shownAlready = shownAlready + (present or 0)
-		st.why = whyNot
+		searched = searched or got ~= nil
+		firstWhy = firstWhy or whyNot
 	end
+	st.why = (not searched) and (firstWhy or "no chat frames") or nil
 	st.relinked = (st.relinked or 0) + n
-	if shownAlready == 0 and print and st.printedFor ~= gmotd and not st.why then
+	if shownAlready > 0 then
+		st.printedFor = gmotd -- a frame shows it linked: never print another copy of this MOTD
+	end
+	if shownAlready == 0 and print and st.printedFor ~= gmotd and searched then
 		local linked = Chat.linkify(gmotd)
 		local info = _G.ChatTypeInfo and _G.ChatTypeInfo.GUILD -- FrameXML table, read via _G for luacheck
 		local template = GUILD_MOTD_TEMPLATE or "Guild Message of the Day: %s"
@@ -393,7 +399,9 @@ function Chat.onMOTDEvent(gmotd)
 	Chat.rememberMOTD(gmotd)
 	if motdState and C_Timer and C_Timer.After then
 		C_Timer.After(0, function()
-			Chat.relinkAllMOTD(gmotd, false)
+			-- The frames printed it in this same event: one frame later it is there to relink. When none
+			-- shows it (no frame takes guild lines), print the linked copy once.
+			Chat.relinkAllMOTD(gmotd, true)
 		end)
 	end
 end

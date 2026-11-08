@@ -111,15 +111,35 @@ describe("Sound", function()
 			assert.is_nil(ns.Sound.speak("nǐ hǎo"))
 		end)
 
-		it("tells game sound off (not now) from a refusal", function()
+		it("tells game sound off (not now) from a refusal, and probes again once sound is on", function()
+			local refuse, on = true, false
 			_G.PlaySoundFile = function()
-				return false, nil
+				if refuse then
+					return false, nil
+				end
+				return true, 7
 			end
 			_G.C_CVar.GetCVarBool = function()
-				return false
+				return on
 			end
 			assert.equal("sound off", ns.Sound.probe().status)
 			assert.equal("game sound is off", select(2, ns.Sound.ready()))
+			refuse, on = false, true
+			assert.is_true(ns.Sound.ready())
+			assert.equal("ok", ns.Sound.result.status)
+		end)
+
+		it("stops every playing syllable of the word on stop", function()
+			local queued = {}
+			_G.C_Timer.After = function(_, fn)
+				queued[#queued + 1] = fn
+			end
+			ns.Sound.probe()
+			stopped = {}
+			ns.Sound.speak("nǐ hǎo")
+			queued[1]()
+			ns.Sound.stop()
+			assert.equal(2, #stopped) -- both handles, not only the newest
 		end)
 
 		it("records a PlaySoundFile error as error", function()

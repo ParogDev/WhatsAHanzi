@@ -104,6 +104,9 @@ describe("MOTD links", function()
 		assert.equal(ns.Hash.fnv1a32("今晚开组"), ns.db.motd.hash)
 		ns.Chat.relinkAllMOTD(nil, true) -- another late try: still one copy
 		assert.equal(2, #f.lines)
+		ns.Chat.onMOTDEvent("今晚开组") -- the event for the same MOTD: still one copy
+		assert.equal(2, #f.lines)
+		assert.is_nil(st.why)
 		_G.ChatFrame1 = nil
 	end)
 end)

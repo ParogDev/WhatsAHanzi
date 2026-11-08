@@ -642,7 +642,7 @@ function Card.enter(chatFrame, link, text, region, left, bottom, width, height)
 	end
 	showHighlight(ctx)
 	showKeys(true)
-	if data then
+	if data and ns.Sound then -- Sound.lua is a new TOC file: absent until a client restart
 		ns.Sound.speakHover(ctx, Card.reading(data))
 	end
 end
@@ -662,7 +662,7 @@ function Card.enterWord(anchor, word)
 		return
 	end
 	showKeys(true)
-	if data then
+	if data and ns.Sound then
 		ns.Sound.speakHover(ctx, Card.reading(data))
 	end
 end
@@ -670,6 +670,9 @@ end
 function Card.leave()
 	Card.ctx = nil
 	showKeys(false)
+	if ns.Sound then
+		ns.Sound.stop() -- the word under the mouse is the one spoken; leaving it ends it
+	end
 	hideAnimated(highlight)
 	hideAnimated(card)
 end

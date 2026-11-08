@@ -111,6 +111,10 @@ end
 -- Whether the bank can play now; false with the reason the card shows otherwise.
 function Sound.ready()
 	local r = Sound.result
+	-- Sound was off at the last probe and is on now: probe again, so turning sound on needs no /reload.
+	if r and r.status == "sound off" and soundOn() == true then
+		r = Sound.probe()
+	end
 	if not r then
 		return false, "sound not probed yet"
 	end
@@ -128,25 +132,27 @@ function Sound.enabled()
 	return not (ns.db and ns.db.ui and ns.db.ui.speak == false)
 end
 
-local generation, lastHandle = 0, nil
+local generation, handles = 0, {}
 
 -- Stops the word being spoken and cancels its queued syllables.
 function Sound.stop()
 	generation = generation + 1
-	if lastHandle and StopSound then
-		StopSound(lastHandle)
+	if StopSound then
+		for _, h in ipairs(handles) do
+			StopSound(h)
+		end
 	end
-	lastHandle = nil
+	handles = {}
 end
 
 local function playOne(name, gen)
-	if gen ~= generation then
+	if gen ~= generation or type(PlaySoundFile) ~= "function" then
 		return
 	end
 	local st = ns.selftest
 	local okCall, willPlay, handle = pcall(PlaySoundFile, Sound.DIR .. name .. ".ogg", Sound.CHANNEL)
 	if okCall and willPlay then
-		lastHandle = handle
+		handles[#handles + 1] = handle -- syllables overlap by Sound.OVERLAP: stop must reach each one
 		if st then
 			st.counters.syllables = (st.counters.syllables or 0) + 1
 		end
@@ -197,7 +203,7 @@ end
 
 -- After a held hover: speaks the reading if ctx is still the open card (Card.ctx) after Sound.DELAY.
 function Sound.speakHover(ctx, reading)
-	if not Sound.enabled() or not Sound.ready() then
+	if not Sound.enabled() or not Sound.ready() or not (C_Timer and C_Timer.After) then
 		return
 	end
 	C_Timer.After(Sound.DELAY, function()
