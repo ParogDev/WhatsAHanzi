@@ -34,7 +34,11 @@ describe("Chat window links", function()
 		assert.truthy(out)
 		assert.equal(ns.Hash.fnv1a32("gg 你好 怒焰"), line.hash)
 		assert.equal("gg 你好 怒焰", line.body)
-		assert.same({ "gg ", "你好", " ", "怒焰" }, { line.tokens[1].word, line.tokens[2].word, line.tokens[3].word, line.tokens[4].word })
+		local words = {}
+		for k, t in ipairs(line.tokens) do
+			words[k] = t.word
+		end
+		assert.same({ "gg ", "你好", " ", "怒焰" }, words)
 		assert.equal(line, ns.Chat.lines.get(line.hash))
 		local hash, index = ns.Chat.tokenFromLink("addon:WhatsAHanzi:" .. line.hash .. ":4")
 		assert.equal(line.hash, hash)
@@ -69,10 +73,12 @@ describe("Chat window links", function()
 		local tex = "|TInterface\\Icons\\INV_Misc_Book_09:0|t"
 		local text = item .. " 你好 " .. tex
 		local out, line = ns.Chat.linkify(text)
-		assert.equal(item .. " " .. NEW .. link(text, 3, "你好") .. "|r " .. tex, out)
-		assert.equal("[你好剑]", line.tokens[1].word)
-		assert.is_true(line.tokens[1].escape)
-		assert.equal("你好", line.tokens[3].word)
+		-- tokens: the colour code, the item link (as its text), "|r ", the word, " ", the texture
+		assert.equal(item .. " " .. NEW .. link(text, 4, "你好") .. "|r " .. tex, out)
+		assert.equal("[你好剑]", line.tokens[2].word)
+		assert.is_true(line.tokens[2].escape)
+		assert.equal("你好", line.tokens[4].word)
+		assert.is_true(line.tokens[6].escape)
 	end)
 
 	it("filters chat events with the linked text and passes the other arguments through", function()
@@ -142,13 +148,13 @@ describe("Chat window links", function()
 
 	it("rebuilds an uncached line from the chat frame's messages", function()
 		local out, line = ns.Chat.linkify("你好 gg 怒焰")
-		local lnk = "addon:WhatsAHanzi:" .. line.hash .. ":4"
+		local lnk = "addon:WhatsAHanzi:" .. line.hash .. ":3"
 		_G.ChatFrame1:AddMessage("[Guild] [Bob]: " .. out)
 		_G.ChatFrame1:AddMessage("[Guild] [Ann]: later line")
 		ns.Chat.lines.clear()
 		local got, index = ns.Chat.lineForLink(_G.ChatFrame1, lnk, "怒焰")
 		assert.equal("你好 gg 怒焰", got.body)
-		assert.equal(4, index)
+		assert.equal(3, index)
 		assert.equal("怒焰", got.tokens[index].word)
 		assert.is_true(got.rebuilt)
 		assert.equal(got, ns.Chat.lines.get(line.hash))

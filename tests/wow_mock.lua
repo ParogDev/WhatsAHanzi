@@ -4,9 +4,11 @@
 local M = {}
 
 local function noop() end
-local anyMethod = { __index = function()
-	return noop
-end }
+local anyMethod = {
+	__index = function()
+		return noop
+	end,
+}
 
 -- A pure-Lua 32-bit bit library for plain Lua 5.1 (the client has LuaBitOp; the test container does not).
 local function toBits(n)

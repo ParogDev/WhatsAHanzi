@@ -12,7 +12,12 @@ ns.Data.live = {
 	generatedAt = "2026-11-07 21:00:00",
 	model = "haiku",
 	lines = {
-		["3043a59c"] = { t = "I got blasted by an Alliance hunter in Ashenvale", ctx = 3, m = "haiku", at = 1762567200 },
+		["3043a59c"] = {
+			t = "I got blasted by an Alliance hunter in Ashenvale",
+			ctx = 3,
+			m = "haiku",
+			at = 1762567200,
+		},
 	},
 	terms = {
 		["灰谷"] = { "Ashenvale", "zone" },

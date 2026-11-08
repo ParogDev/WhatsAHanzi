@@ -429,7 +429,8 @@ function Card.show(ctx)
 		local s = UIParent:GetEffectiveScale()
 		c:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT", cx / s - 10, cy / s + 14)
 	end
-	if not c:IsShown() then
+	-- A card still fading out (the last word was left a moment ago) is brought back, not re-hidden.
+	if not c:IsShown() or c.out:IsPlaying() then
 		showAnimated(c)
 	end
 	return data

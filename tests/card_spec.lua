@@ -31,7 +31,9 @@ describe("Card", function()
 		live = {
 			generatedAt = "2026-11-07 21:00:00",
 			model = "haiku",
-			lines = { [line.hash] = { t = "I got blasted by an Alliance hunter in Ashenvale", ctx = 3, m = "haiku" } },
+			lines = {
+				[line.hash] = { t = "I got blasted by an Alliance hunter in Ashenvale", ctx = 3, m = "haiku" },
+			},
 			terms = { ["灰谷"] = { "Ashenvale", "zone" } },
 			patterns = { ["被"] = "passive marker", ["了"] = "completed action" },
 		}
@@ -46,23 +48,24 @@ describe("Card", function()
 
 	it("keeps the first two senses of the gloss", function()
 		assert.equal("ash valley / Ashenvale (zone)", ns.Card.build(line, 3, nil, {}).gloss)
-		assert.equal("hunter", ns.Card.build(line, 7, nil, {}).gloss)
+		assert.equal("hunter", ns.Card.build(line, 6, nil, {}).gloss)
 		assert.is_nil(ns.Card.build(line, 2, nil, {}).gloss) -- 在: no entry
 		assert.is_nil(ns.Card.shortGloss(nil))
 	end)
 
 	it("lights the hovered word in the sentence and counts known words", function()
 		local vocab = { ["我"] = { n = 9 }, ["猎人"] = { n = 2, known = true } }
+		-- 我 | 在 | 灰谷 | 被 | 联盟 | 猎人 | 射 | 爆 | 了
 		local d = ns.Card.build(line, 3, live, vocab)
-		assert.equal(8, #d.sentence)
+		assert.equal(9, #d.sentence)
 		assert.is_true(d.sentence[3].lit)
 		assert.is_false(d.sentence[1].lit)
 		assert.is_true(d.sentence[1].known)
-		assert.is_true(d.sentence[7].known)
+		assert.is_true(d.sentence[6].known)
 		assert.is_false(d.sentence[3].known)
-		assert.same({ known = 2, total = 8 }, d.meter)
+		assert.same({ known = 2, total = 9 }, d.meter)
 		assert.is_false(d.known)
-		assert.is_true(ns.Card.build(line, 7, live, vocab).known)
+		assert.is_true(ns.Card.build(line, 6, live, vocab).known)
 		local markup = ns.Card.sentenceMarkup(d.sentence)
 		assert.truthy(markup:find("|cff5ccbf2灰谷|r", 1, true))
 		assert.truthy(markup:find("|cffd0d0d0我|r", 1, true))
@@ -70,11 +73,17 @@ describe("Card", function()
 
 	it("adds the companion's translation, term tag and pattern notes when present", function()
 		local d = ns.Card.build(line, 3, live, {})
-		assert.same({ text = "I got blasted by an Alliance hunter in Ashenvale", model = "haiku", ctx = 3 }, d.translation)
+		assert.same(
+			{ text = "I got blasted by an Alliance hunter in Ashenvale", model = "haiku", ctx = 3 },
+			d.translation
+		)
 		assert.same({ en = "Ashenvale", kind = "zone" }, d.term)
-		assert.same({ { key = "被", note = "passive marker" }, { key = "了", note = "completed action" } }, d.patterns)
+		assert.same({
+			{ key = "被", note = "passive marker" },
+			{ key = "了", note = "completed action" },
+		}, d.patterns)
 		-- hovering the pattern word itself lists it first
-		assert.equal("了", ns.Card.build(line, 8, live, {}).patterns[1].key)
+		assert.equal("了", ns.Card.build(line, 9, live, {}).patterns[1].key)
 	end)
 
 	it("works without the companion's file", function()
@@ -99,7 +108,10 @@ describe("Card", function()
 		ns.Card.enter(_G.ChatFrame1, "addon:WhatsAHanzi:" .. line.hash .. ":3", "灰谷", region, 10, 2, 30, 14)
 		assert.is_nil(mock.lastError)
 		assert.equal(1, ns.selftest.counters.cards)
-		assert.same({ left = 10, bottom = 2, width = 30, height = 14, regionType = "Frame" }, ns.selftest.hoverBounds)
+		assert.same(
+			{ left = 10, bottom = 2, width = 30, height = 14, regionType = "Frame" },
+			ns.selftest.hoverBounds
+		)
 		local keys = _G["WhatsAHanziCardKeys"]
 		for _, f in ipairs(mock.frames) do
 			if f._name == "WhatsAHanziCardKeys" then
@@ -133,6 +145,7 @@ describe("Card", function()
 		mock.inCombat = true
 		ns.Card.enterWord(_G.UIParent, "灰谷")
 		assert.is_nil(mock.lastError)
+		assert.equal(1, ns.selftest.counters.cards)
 		for _, f in ipairs(mock.frames) do
 			if f._name == "WhatsAHanziCardKeys" then
 				assert.is_false(f:IsShown())

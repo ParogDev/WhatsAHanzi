@@ -94,7 +94,8 @@ function Options.register()
 
 	local function addon(key, tbl, kind, name, default)
 		st.settings = st.settings + 1
-		return Settings.RegisterAddOnSetting(category, "WAH_" .. key, key, tbl, Settings.VarType[kind], name, default)
+		local varType = Settings.VarType[kind]
+		return Settings.RegisterAddOnSetting(category, "WAH_" .. key, key, tbl, varType, name, default)
 	end
 
 	local inChat = addon("inChat", ui, "Boolean", "Words in chat linked", true)

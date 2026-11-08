@@ -22,5 +22,6 @@ function Hash.fnv1a32(s)
 		h = bxor(h, s:byte(i)) % MOD
 		h = mulPrime(h)
 	end
-	return ("%08x"):format(h)
+	-- Two 16-bit halves: %x casts through a C long, 32 bits on Windows, which 2^31 and above would overflow.
+	return ("%04x%04x"):format(math.floor(h / 65536), h % 65536)
 end
