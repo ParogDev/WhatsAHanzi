@@ -40,6 +40,40 @@ function Card.charReadings(t)
 	return out
 end
 
+-- The reading spoken for the card: one syllable per character, as the ruby row shows it.
+function Card.reading(data)
+	local parts = {}
+	for i, col in ipairs(data.chars) do
+		parts[i] = col.py
+	end
+	return table.concat(parts, " ")
+end
+
+-- Glossary kinds (Data/Game.lua) -> client atlas shown before "Ashenvale · zone". Every name is in the
+-- Forever client's AtlasInfo; a kind without one shows the text alone.
+Card.KIND_ATLAS = {
+	zone = "poi-town",
+	subzone = "poi-town",
+	map = "poi-majorcity",
+	dungeon = "Dungeon",
+	boss = "DungeonSkull",
+	class = "Class",
+	race = "socialqueuing-icon-group",
+	faction = "socialqueuing-icon-group",
+	profession = "Profession",
+	role = "UI-LFG-RoleIcon-Generic",
+	item = "bags-icon-equipment",
+	spell = "UI-HUD-MicroMenu-SpellbookAbilities-Up",
+	slang = "communities-icon-chat",
+	meme = "communities-icon-chat",
+}
+
+-- "|A:poi-town:14:14|a " for a known kind, "" otherwise.
+function Card.kindIcon(kind)
+	local atlas = kind and Card.KIND_ATLAS[kind]
+	return atlas and ("|A:" .. atlas .. ":14:14|a ") or ""
+end
+
 -- First two senses of a CEDICT gloss: "to be able/can/possible/..." -> "to be able / can".
 function Card.shortGloss(meaning)
 	if not meaning or meaning == "" then
@@ -451,7 +485,12 @@ function Card.show(ctx)
 	if data.term then
 		row(
 			13,
-			"|cffffe08a" .. safe(data.term.en) .. "|r  |cff8a8a8a·|r  |cffb0b0b0" .. safe(data.term.kind) .. "|r",
+			Card.kindIcon(data.term.kind)
+				.. "|cffffe08a"
+				.. safe(data.term.en)
+				.. "|r  |cff8a8a8a·|r  |cffb0b0b0"
+				.. safe(data.term.kind)
+				.. "|r",
 			6
 		)
 		if data.gloss then
@@ -481,7 +520,15 @@ function Card.show(ctx)
 	local hint = (Card.keysEnabled() and not (InCombatLockdown and InCombatLockdown()))
 			and "   |cff5c6670K known · S star|r"
 		or ""
-	row(11, meter .. hint, 6)
+	-- The bank cannot play here (probe refused, or game sound off): say where the sound is instead.
+	local soundNote = ""
+	if ns.Sound and ns.Sound.enabled() then
+		local canPlay, soundWhy = ns.Sound.ready()
+		if not canPlay and soundWhy then
+			soundNote = "   |A:voicechat-icon-speaker-mute:12:12|a |cff5c6670" .. soundWhy .. "|r"
+		end
+	end
+	row(11, meter .. hint .. soundNote, 6)
 
 	-- Pattern notes.
 	for _, p in ipairs(data.patterns) do
@@ -595,6 +642,9 @@ function Card.enter(chatFrame, link, text, region, left, bottom, width, height)
 	end
 	showHighlight(ctx)
 	showKeys(true)
+	if data then
+		ns.Sound.speakHover(ctx, Card.reading(data))
+	end
 end
 
 -- A single word hovered in the pane (no sentence): the card above the given frame.
@@ -605,13 +655,16 @@ function Card.enterWord(anchor, word)
 	local ctx = { line = { body = word, tokens = ns.Dict.segment(word) }, index = 1, anchor = anchor }
 	Card.ctx = ctx
 	ns.selftest.counters.cards = (ns.selftest.counters.cards or 0) + 1
-	local ok, err = pcall(Card.show, ctx)
+	local ok, data = pcall(Card.show, ctx)
 	if not ok then
-		ns.selftest.lastError = "card: " .. tostring(err)
-		geterrorhandler()(err)
+		ns.selftest.lastError = "card: " .. tostring(data)
+		geterrorhandler()(data)
 		return
 	end
 	showKeys(true)
+	if data then
+		ns.Sound.speakHover(ctx, Card.reading(data))
+	end
 end
 
 function Card.leave()

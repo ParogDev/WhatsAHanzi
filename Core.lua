@@ -20,6 +20,7 @@ local defaults = {
 		knownAfter = 8,
 		cardScale = 1,
 		hoverKeys = false, -- K/S on an open card; opt-in so the card never takes keys the user bound
+		speak = true, -- a held hover speaks the word from the syllable bank (Sound.lua)
 	},
 	vocab = {},
 	selftest = {},
@@ -121,6 +122,9 @@ function selftest.snapshot(phase)
 		savedAt = date("%Y-%m-%d %H:%M:%S"),
 		loadedAt = selftest.loadedAt,
 		fontProbe = ns.Font and ns.Font.probe or nil,
+		-- Sound.lua is a new TOC file and Sounds/ new files: a /reload alone loads neither, a restart does.
+		soundProbe = (ns.Sound and ns.Sound.result) or "Sound.lua not loaded (restart the client)",
+		soundMiss = selftest.soundMiss,
 		counters = selftest.counters,
 		dictWords = ns.Dict.count(),
 		-- Data/Game.lua is a new TOC file: a /reload alone does not load it, only a client restart does.
@@ -215,6 +219,22 @@ local function onSlash(input)
 		else
 			print("/hanzi size <10-48> (now " .. tostring(ns.db.ui.fontSize or ns.UI.DEFAULT_FONT_SIZE) .. ")")
 		end
+	elseif cmd == "speak" then
+		-- /hanzi speak 你好: the words' readings through the syllable bank, as a hover would.
+		local text = rest and (input or ""):match("^%s*%S+%s+(.+)$")
+		if not text then
+			local r = ns.Sound.result
+			print("/hanzi speak <chinese text>; sound probe: " .. tostring(r and r.status or "not run"))
+		else
+			local parts = {}
+			for _, tok in ipairs(ns.Dict.segment(text)) do
+				if tok.han then
+					parts[#parts + 1] = ns.Card.reading({ chars = ns.Card.charReadings(tok) })
+				end
+			end
+			local names, why = ns.Sound.speak(table.concat(parts, " "))
+			print(names and table.concat(names, " ") or ("|cffff6060" .. tostring(why) .. "|r"))
+		end
 	elseif cmd == "vocab" then
 		local n = 0
 		for _ in pairs(ns.db.vocab) do
@@ -237,7 +257,7 @@ local function onSlash(input)
 		ns.Options.refresh()
 	else
 		print(
-			"/hanzi  toggle | options | test <chinese text> | chat on|off | size <10-48> | font <name> | tones marks|numbers | status | vocab | reset"
+			"/hanzi  toggle | options | test <chinese text> | speak <chinese text> | chat on|off | size <10-48> | font <name> | tones marks|numbers | status | vocab | reset"
 		)
 	end
 end
@@ -259,6 +279,14 @@ frame:SetScript("OnEvent", function(self, event, ...)
 		selftest.loadedAt = date("%Y-%m-%d %H:%M:%S")
 		ns.Font.detect()
 		ns.Font.chatCJK()
+		if ns.Sound then
+			local okSnd, errSnd = pcall(ns.Sound.probe)
+			if not okSnd then
+				selftest.soundProbe = { status = "error", error = "Sound.probe: " .. tostring(errSnd) }
+				ns.Sound.result = selftest.soundProbe
+				geterrorhandler()(errSnd)
+			end
+		end
 		ns.UI.get()
 		ns.Chat.register(self)
 		local okOpt, errOpt = pcall(ns.Options.register)

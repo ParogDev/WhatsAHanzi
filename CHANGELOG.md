@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- The hovered word is read aloud, one syllable at a time, from a bank of 1,503 syllable recordings in `Sounds/` (Kokoro-82M, voice zf_001). A hover held for a quarter second speaks; sweeping the mouse stays quiet. Setting: "Speak hovered words". `/hanzi speak 你好` plays any text. The addon checks at login that the client plays its sound files; when it does not, the card says "sound plays in the companion". Needs a client restart once (new files). The bank is not in the release zip yet.
+- Glossary terms on the card show an icon for their kind (zone, dungeon, boss, item, spell, slang...).
 - Game names and guild slang: `Data/Game.lua` (about 7,000 zones, dungeons, bosses, items, class spells, races, factions and slang terms, from the Forever client's own data). A term at least as long as the dictionary word wins, so 灰谷 shows `Ashenvale · zone` with the dictionary gloss under it. Needs a client restart once (new file).
 - `K` and `S` on the hover card are off by default; turn them on in Settings ("K and S keys on the card"). Off, the card takes no keys at all.
 - `/hanzi reset` now redraws the Settings panel with the reset values.

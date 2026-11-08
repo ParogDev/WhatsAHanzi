@@ -20,6 +20,7 @@ else
 		-- CI in this repo runs standalone: every global the addon touches must be here as well.
 		"Settings", "InCombatLockdown", "C_GuildInfo", "IsShiftKeyDown", "IsControlKeyDown", "IsAltKeyDown",
 		"CreateSettingsListSectionHeaderInitializer", "WOW_PROJECT_CAMELOT", "SlashCmdList",
+			"PlaySoundFile", "StopSound", "C_CVar",
 	}
 end
 -- FrameXML globals the generated list doesn't carry (it is built from the C API lists).
