@@ -14,10 +14,11 @@ local PAD = 10
 local TEXT_WIDTH = 340
 local ENTRANCE, EXIT = 0.12, 0.08
 
--- The card's only font sizes. The client caches every glyph it draws per font and pixel size, and the card
--- draws every Han character hovered: each extra size (and, before, the entrance's 0.92-1 Scale animation,
--- which drew the text at in-between sizes on every hover) filled that cache until glyphs came out smeared
--- and overlapping, cleared only by /reload. Three fixed sizes, no scaling animation.
+-- The card's only font sizes. Most likely cause of the card's text turning smeared and overlapping after a
+-- while of play (only /reload cleared it): the client caches every glyph it draws per font and pixel size,
+-- the card draws every Han character hovered, and each extra size (and, before, the entrance's 0.92-1 Scale
+-- animation, which drew the text at in-between sizes on every hover) added to that cache. Three sizes, no
+-- scaling animation. The pixel sizes follow cardScale and the UI scale, which change only from Settings.
 Card.SIZE = { glyph = 28, text = 14, small = 12 }
 
 -- Pool and font counters for the selftest (selftest.cardPool): created stays flat once the biggest card
@@ -337,9 +338,14 @@ end
 
 local card, highlight, keys
 
+-- Only when the pooled FontString's font or size changes: no SetFont churn on every hover.
 local function setFont(fs, size)
 	Card.stats.sizes[size] = true
-	fs:SetFont(ns.Font.card(), size, "")
+	local path = ns.Font.card()
+	if fs.wahFont ~= path or fs.wahSize ~= size then
+		fs:SetFont(path, size, "")
+		fs.wahFont, fs.wahSize = path, size
+	end
 end
 
 -- selftest.cardPool: { created, peak, shows, sizes = "12,14,28" }.

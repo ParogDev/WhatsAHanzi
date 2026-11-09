@@ -280,7 +280,29 @@ describe("Card", function()
 				card = f
 			end
 		end
-		assert.same({ "Alpha" }, card.anim._types)
+		-- No Scale anywhere: the card's entrance and exit, and the highlight's.
+		local highlight
+		for _, f in ipairs(mock.frames) do
+			if f._name == "WhatsAHanziCardHighlight" then
+				highlight = f
+			end
+		end
+		for _, ag in ipairs({ card.anim, card.out, highlight.anim, highlight.out }) do
+			assert.same({ "Alpha" }, ag._types)
+		end
+		-- SetFont runs only when a pooled FontString changes font or size.
+		local calls = 0
+		for _, fs in ipairs(card.pool.fs) do
+			local orig = fs.SetFont
+			fs.SetFont = function(...)
+				calls = calls + 1
+				return orig(...)
+			end
+		end
+		ns.Card.enterWord(_G.UIParent, "灰谷")
+		local again = calls
+		ns.Card.enterWord(_G.UIParent, "灰谷")
+		assert.equal(again, calls)
 		-- Unused pool entries are hidden, not left showing old text under the new.
 		local shown = 0
 		for _, fs in ipairs(card.pool.fs) do
@@ -288,7 +310,7 @@ describe("Card", function()
 		end
 		assert.equal(card.pool.nfs, shown)
 		-- The selftest carries the same summary, so the verify loop sees growth after a /reload.
-		assert.same(s, ns.selftest.snapshot("test").cardPool)
+		assert.same(ns.Card.poolSummary(), ns.selftest.snapshot("test").cardPool)
 	end)
 end)
 
