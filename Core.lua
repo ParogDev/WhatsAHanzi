@@ -138,6 +138,7 @@ function selftest.snapshot(phase)
 		motd = ns.db.motd and ns.db.motd.hash or nil,
 		motdLink = selftest.motdLink,
 		cardLineMiss = selftest.cardLineMiss,
+		cardPool = ns.Card and ns.Card.poolSummary() or nil,
 		options = selftest.options,
 	}
 	ns.db.selftest = s

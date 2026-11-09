@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- The hover card no longer turns smeared and overlapping after a while of play (only `/reload` cleared it). The card fades in without the small zoom, and uses three text sizes instead of five, so the client's glyph cache stops filling up.
 - The hovered word is read aloud, one syllable at a time, from a bank of 1,503 syllable recordings in `Sounds/` (Kokoro-82M, voice zf_001). A hover held for a quarter second speaks; sweeping the mouse stays quiet. Setting: "Speak hovered words". `/hanzi speak 你好` plays any text. The addon checks at login that the client plays its sound files; when it does not, the card says "sound plays in the companion". Needs a client restart once (new files). The bank is not in the release zip yet.
 - The guild Message of the Day in the chat window now has hover links (it never reached the chat filter: the chat frame prints it itself).
 - Glossary terms on the card show an icon for their kind (zone, dungeon, boss, item, spell, slang...).

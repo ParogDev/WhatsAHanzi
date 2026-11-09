@@ -14,6 +14,16 @@ local PAD = 10
 local TEXT_WIDTH = 340
 local ENTRANCE, EXIT = 0.12, 0.08
 
+-- The card's only font sizes. The client caches every glyph it draws per font and pixel size, and the card
+-- draws every Han character hovered: each extra size (and, before, the entrance's 0.92-1 Scale animation,
+-- which drew the text at in-between sizes on every hover) filled that cache until glyphs came out smeared
+-- and overlapping, cleared only by /reload. Three fixed sizes, no scaling animation.
+Card.SIZE = { glyph = 28, text = 14, small = 12 }
+
+-- Pool and font counters for the selftest (selftest.cardPool): created stays flat once the biggest card
+-- has been shown; sizes lists every font size the card has used this session.
+Card.stats = { created = 0, peak = 0, shows = 0, sizes = {} }
+
 -- Data ------------------------------------------------------------------------------------------------------
 
 -- Tone number of one marked syllable ("nǐ" -> 3; no mark -> 5).
@@ -255,7 +265,9 @@ local function acquireFS(card)
 		-- "Font not set" (every card failed in game that way). setFont replaces it before any real text.
 		fs = card:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
 		p.fs[p.nfs] = fs
+		Card.stats.created = Card.stats.created + 1
 	end
+	Card.stats.peak = math.max(Card.stats.peak, p.nfs)
 	fs:ClearAllPoints()
 	fs:SetText("")
 	fs:SetWidth(0)
@@ -279,22 +291,14 @@ end
 
 -- Animations -----------------------------------------------------------------------------------------------
 
--- Entrance: fade in and, for the card, a scale-up from 0.92 anchored at the bottom-left.
-local function entranceGroup(target, scale, duration)
+-- Entrance: a fade in. Never a Scale animation on a frame with text: see Card.SIZE.
+local function entranceGroup(target, duration)
 	local ag = target:CreateAnimationGroup()
 	local a = ag:CreateAnimation("Alpha")
 	a:SetFromAlpha(0)
 	a:SetToAlpha(1)
 	a:SetDuration(duration)
 	a:SetSmoothing("OUT")
-	if scale then
-		local s = ag:CreateAnimation("Scale")
-		s:SetScaleFrom(0.92, 0.92)
-		s:SetScaleTo(1, 1)
-		s:SetDuration(duration)
-		s:SetSmoothing("OUT")
-		s:SetOrigin("BOTTOMLEFT", 0, 0)
-	end
 	return ag
 end
 
@@ -334,7 +338,18 @@ end
 local card, highlight, keys
 
 local function setFont(fs, size)
+	Card.stats.sizes[size] = true
 	fs:SetFont(ns.Font.card(), size, "")
+end
+
+-- selftest.cardPool: { created, peak, shows, sizes = "12,14,28" }.
+function Card.poolSummary()
+	local s, sizes = Card.stats, {}
+	for size in pairs(s.sizes) do
+		sizes[#sizes + 1] = size
+	end
+	table.sort(sizes)
+	return { created = s.created, peak = s.peak, shows = s.shows, sizes = table.concat(sizes, ",") }
 end
 
 -- Offsets from OnHyperlinkEnter are in the chat FontString's scale; SetPoint and SetSize take the
@@ -375,7 +390,7 @@ local function cardFrame()
 	f.accent:SetPoint("TOPRIGHT", -1, -1)
 	f.accent:SetHeight(2)
 	f.pool = { fs = {}, nfs = 0 }
-	f.anim = entranceGroup(f, true, ENTRANCE)
+	f.anim = entranceGroup(f, ENTRANCE)
 	f.out = exitGroup(f)
 	f:Hide()
 	card = f
@@ -403,7 +418,7 @@ local function showHighlight(ctx)
 		highlight = CreateFrame("Frame", ADDON .. "CardHighlight", UIParent)
 		highlight:SetFrameStrata("TOOLTIP")
 		highlight.rows = {}
-		highlight.anim = entranceGroup(highlight, false, 0.1)
+		highlight.anim = entranceGroup(highlight, 0.1)
 		highlight.out = exitGroup(highlight)
 	end
 	local rects = ctx.rects
@@ -528,6 +543,8 @@ function Card.show(ctx)
 	end
 	local c = cardFrame()
 	resetPools(c)
+	Card.stats.shows = Card.stats.shows + 1
+	local SIZE = Card.SIZE
 	c:SetScale((ns.db.ui and ns.db.ui.cardScale) or 1)
 	local rows = {} -- FontStrings stacked under the ruby row, with the gap above each
 
@@ -535,10 +552,10 @@ function Card.show(ctx)
 	local x, colH = PAD, 0
 	for _, col in ipairs(data.chars) do
 		local p = acquireFS(c)
-		setFont(p, 12)
+		setFont(p, SIZE.small)
 		p:SetText(Card.coloredPinyin(col.py))
 		local h = acquireFS(c)
-		setFont(h, 28)
+		setFont(h, SIZE.glyph)
 		h:SetText(col.ch)
 		local w = math.max(h:GetStringWidth(), p:GetStringWidth()) + 8
 		p:SetPoint("TOP", c, "TOPLEFT", x + w / 2, -PAD - 2)
@@ -556,7 +573,7 @@ function Card.show(ctx)
 	end
 	if #marks > 0 then
 		local m = acquireFS(c)
-		setFont(m, 11)
+		setFont(m, SIZE.small)
 		m:SetText(table.concat(marks, "  "))
 		m:SetPoint("BOTTOMLEFT", c, "TOPLEFT", x + 2, -PAD - 2 - colH + 4)
 		x = x + m:GetStringWidth() + 6
@@ -582,7 +599,7 @@ function Card.show(ctx)
 	-- Gloss, or the game term.
 	if data.term then
 		row(
-			13,
+			SIZE.text,
 			Card.kindIcon(data.term.kind)
 				.. "|cffffe08a"
 				.. safe(data.term.en)
@@ -592,10 +609,10 @@ function Card.show(ctx)
 			6
 		)
 		if data.gloss then
-			row(12, safe(data.gloss), 2, { 0.75, 0.75, 0.75 })
+			row(SIZE.small, safe(data.gloss), 2, { 0.75, 0.75, 0.75 })
 		end
 	else
-		row(13, data.gloss and safe(data.gloss) or "|cff888888(no dictionary entry)|r", 6, { 0.92, 0.92, 0.92 })
+		row(SIZE.text, data.gloss and safe(data.gloss) or "|cff888888(no dictionary entry)|r", 6, { 0.92, 0.92, 0.92 })
 	end
 
 	-- Translation from the companion, or the quiet state.
@@ -605,13 +622,13 @@ function Card.show(ctx)
 		if type(tr.ctx) == "number" and tr.ctx > 0 then
 			chip = chip .. " · " .. tr.ctx .. " lines of context"
 		end
-		row(13, "|cffe6e6e6" .. safe(tr.text) .. "|r  |cff6f8ea0" .. chip .. "|r", 8)
+		row(SIZE.text, "|cffe6e6e6" .. safe(tr.text) .. "|r  |cff6f8ea0" .. chip .. "|r", 8)
 	else
-		row(12, "|cff6f8ea0not translated yet|r", 8)
+		row(SIZE.small, "|cff6f8ea0not translated yet|r", 8)
 	end
 
 	-- The sentence with the word lit.
-	row(14, Card.sentenceMarkup(data.sentence), 8)
+	row(SIZE.text, Card.sentenceMarkup(data.sentence), 8)
 
 	-- Meter and key hints.
 	local meter = ("|cffb0b0b0known %d of %d|r"):format(data.meter.known, data.meter.total)
@@ -626,11 +643,11 @@ function Card.show(ctx)
 			soundNote = "   |A:voicechat-icon-speaker-mute:12:12|a |cff5c6670" .. soundWhy .. "|r"
 		end
 	end
-	row(11, meter .. hint .. soundNote, 6)
+	row(SIZE.small, meter .. hint .. soundNote, 6)
 
 	-- Pattern notes.
 	for _, p in ipairs(data.patterns) do
-		row(11, "|cffcf95ff" .. safe(p.key) .. "|r  |cffb0b0b0" .. safe(p.note) .. "|r", 3)
+		row(SIZE.small, "|cffcf95ff" .. safe(p.key) .. "|r  |cffb0b0b0" .. safe(p.note) .. "|r", 3)
 	end
 
 	-- Stack the rows and size the card.
