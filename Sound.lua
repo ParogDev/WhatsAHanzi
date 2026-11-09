@@ -133,17 +133,51 @@ function Sound.enabled()
 	return not (ns.db and ns.db.ui and ns.db.ui.speak == false)
 end
 
+-- Handles of the files playing now, each with the time it ends ({ handle, ends }): Sound.stop must reach every one
+-- (syllables overlap by Sound.OVERLAP), and a file that has ended is dropped when the next one starts.
 local generation, handles = 0, {}
+
+local function now()
+	return GetTime and GetTime() or 0
+end
+
+local function track(handle, seconds)
+	local t = now()
+	local live = {}
+	for _, h in ipairs(handles) do
+		if h.ends > t then
+			live[#live + 1] = h
+		end
+	end
+	live[#live + 1] = { handle = handle, ends = t + seconds }
+	handles = live
+end
+
+-- Files of the word being spoken that have not ended yet.
+function Sound.playing()
+	local t, n = now(), 0
+	for _, h in ipairs(handles) do
+		if h.ends > t then
+			n = n + 1
+		end
+	end
+	return n
+end
 
 -- Stops the word being spoken and cancels its queued syllables.
 function Sound.stop()
 	generation = generation + 1
 	if StopSound then
 		for _, h in ipairs(handles) do
-			StopSound(h)
+			StopSound(h.handle)
 		end
 	end
 	handles = {}
+end
+
+-- A file's full length in seconds from its ms (Sound.GAP when unknown).
+local function seconds(ms)
+	return type(ms) == "number" and ms > 0 and ms / 1000 or Sound.GAP
 end
 
 local function playOne(name, gen)
@@ -153,7 +187,7 @@ local function playOne(name, gen)
 	local st = ns.selftest
 	local okCall, willPlay, handle = pcall(PlaySoundFile, Sound.DIR .. name .. ".ogg", Sound.CHANNEL)
 	if okCall and willPlay then
-		handles[#handles + 1] = handle -- syllables overlap by Sound.OVERLAP: stop must reach each one
+		track(handle, seconds(ns.Data and ns.Data.soundMs and ns.Data.soundMs[name]))
 		if st then
 			st.counters.syllables = (st.counters.syllables or 0) + 1
 		end
@@ -176,81 +210,179 @@ function Sound.length(name)
 end
 
 -- The word bank (Phase 5d): Sounds/words/<stem>.ogg, one file per spoken (post-sandhi) reading, listed in
--- Data/SoundIndex.lua as ns.Data.wordSound[word] = { stem, ms }. The companion writes the index and lists only
--- files older than the client's start (a newer file would not play until a restart). No index: syllables only.
+-- Data/SoundIndex.lua as ns.Data.wordSound[word] = { stem, ms, reading }. `reading` is the addon's own reading the
+-- file was made for ("ni3hao3": Sound.names of what the card shows, run together); the file plays only when the
+-- card shows that reading, so a polyphone (行 háng/xíng) or a game term read another way plays its syllables. The
+-- companion writes the index and lists only files older than the client's start (a newer file would not play
+-- until a restart). No index: syllables only.
 Sound.WORDS = Sound.DIR .. "words\\"
 
--- The bank stem for a word, or nil: not in the index, no index, a secret value, or a malformed entry.
-function Sound.wordStem(word)
+local function count(key)
+	local st = ns.selftest
+	if st then
+		st.counters[key] = (st.counters[key] or 0) + 1
+	end
+end
+
+-- The bank file for a word shown with `reading`: stem and ms, or nil and why (not in the index, no index, a secret
+-- value, a malformed entry, an entry without a reading, or the card shows another reading than the file says).
+function Sound.wordEntry(word, reading)
 	if type(word) ~= "string" or word == "" then
-		return nil
+		return nil, "no word"
 	end
 	if issecretvalue and issecretvalue(word) then
-		return nil
+		return nil, "secret"
 	end
 	local index = ns.Data and ns.Data.wordSound
 	local entry = type(index) == "table" and index[word]
-	local stem = type(entry) == "table" and entry[1]
-	if type(stem) ~= "string" or not stem:match("^[%w_]+$") then
-		return nil
+	if type(entry) ~= "table" then
+		return nil, "not in the index"
 	end
-	return stem
+	local stem, ms, want = entry[1], entry[2], entry[3]
+	if type(stem) ~= "string" or not stem:match("^[%w_]+$") then
+		return nil, "malformed entry"
+	end
+	if type(want) ~= "string" or want == "" then
+		return nil, "entry has no reading"
+	end
+	if table.concat(Sound.names(reading)) ~= want then
+		count("wordReadingDiffers")
+		return nil, "card reads " .. tostring(reading) .. ", the file says " .. want
+	end
+	return stem, type(ms) == "number" and ms or nil
 end
 
--- Plays the word's file once. False when the client refused it (recorded in selftest.soundMiss).
-local function playWord(stem)
+-- Plays the word's file once. False when the client refused it (counted in selftest.counters.wordMiss, recorded in
+-- selftest.wordMiss and selftest.soundMiss; the counter survives a later syllable miss).
+local function playWord(stem, ms)
 	local st = ns.selftest
-	local okCall, willPlay, handle = pcall(PlaySoundFile, Sound.WORDS .. stem .. ".ogg", Sound.CHANNEL)
+	local okCall, willPlay, handle = false, "PlaySoundFile missing", nil
+	if type(PlaySoundFile) == "function" then
+		okCall, willPlay, handle = pcall(PlaySoundFile, Sound.WORDS .. stem .. ".ogg", Sound.CHANNEL)
+	end
 	if okCall and willPlay then
-		handles[#handles + 1] = handle
-		if st then
-			st.counters.wordSounds = (st.counters.wordSounds or 0) + 1
-		end
+		track(handle, seconds(ms))
+		count("wordSounds")
 		return true
 	end
 	if st then
-		st.soundMiss = { name = "words/" .. stem, error = not okCall and tostring(willPlay) or nil }
+		count("wordMiss")
+		st.wordMiss = { name = "words/" .. stem, error = not okCall and tostring(willPlay) or nil }
+		st.soundMiss = st.wordMiss
 	end
 	return false
 end
 
--- Speaks a reading ("nǐ hǎo"). With `word` in the word bank, its one file plays instead of the syllables.
--- Returns the bank names queued ({ "words/ni2hao3" } for a bank word), or nil and why nothing plays.
-function Sound.speak(reading, word)
+-- Seconds until the item after `item` starts: a word file's ms less the overlap, or a syllable's Sound.length.
+local function itemLength(item)
+	if item.stem then
+		return type(item.ms) == "number" and math.max(item.ms / 1000 - Sound.OVERLAP, 0.1) or Sound.GAP
+	end
+	return Sound.length(item.name)
+end
+
+local function syllableItems(reading)
+	local out = {}
+	for _, name in ipairs(Sound.names(reading)) do
+		out[#out + 1] = { name = name }
+	end
+	return out
+end
+
+-- Plays `items` from now, each after the one before it has played its length.
+local function chain(items, gen, playFirst)
+	if playFirst then
+		playOne(items[1].name, gen)
+	end
+	local at = 0
+	for i = 2, #items do
+		local item = items[i]
+		at = at + itemLength(items[i - 1])
+		C_Timer.After(at, function()
+			if gen ~= generation then
+				return
+			end
+			if item.stem then
+				if not playWord(item.stem, item.ms) then
+					-- refused (a broken file): its syllables from here
+					local syl = syllableItems(item.reading)
+					if #syl > 0 then
+						chain(syl, gen, true)
+					end
+				end
+			else
+				playOne(item.name, gen)
+			end
+		end)
+	end
+	return at + itemLength(items[#items])
+end
+
+-- Speaks words in a row: `parts` is a list of { reading = "nǐ hǎo", word = "你好" }. A word in the bank plays its
+-- one file (when the card's reading matches the file's), every other word its syllables, each starting when the
+-- one before ends (the word file's ms, the syllables' Sound.length). Returns the names queued ({ "words/ni2hao3",
+-- "ma5" }) and the seconds until the last one ends, or nil and why nothing plays.
+function Sound.speakParts(parts)
 	local ok, why = Sound.ready()
 	if not ok then
 		return nil, why
 	end
-	local stem = type(PlaySoundFile) == "function" and Sound.wordStem(word)
-	if stem then
-		Sound.stop()
-		if playWord(stem) then
-			if ns.selftest then
-				ns.selftest.counters.spoken = (ns.selftest.counters.spoken or 0) + 1
+	local items, readings = {}, {}
+	for _, p in ipairs(parts) do
+		readings[#readings + 1] = tostring(p.reading)
+		local stem, ms = Sound.wordEntry(p.word, p.reading)
+		if stem then
+			items[#items + 1] = { stem = stem, ms = ms, reading = p.reading }
+		else
+			for _, item in ipairs(syllableItems(p.reading)) do
+				items[#items + 1] = item
 			end
-			return { "words/" .. stem }
 		end
-		-- Refused (a broken file): the syllable chain below still speaks the word.
-	end
-	local names = Sound.names(reading)
-	if #names == 0 then
-		return nil, "no syllables in " .. tostring(reading)
 	end
 	Sound.stop()
 	local gen = generation
-	playOne(names[1], gen)
-	local at = 0
-	for i = 2, #names do
-		local name = names[i]
-		at = at + Sound.length(names[i - 1])
-		C_Timer.After(at, function()
-			playOne(name, gen)
-		end)
+	-- The first word file plays now; refused (a broken file), its syllables take its place.
+	while items[1] and items[1].stem and not playWord(items[1].stem, items[1].ms) do
+		local first = table.remove(items, 1)
+		local syl = syllableItems(first.reading)
+		for i = #syl, 1, -1 do
+			table.insert(items, 1, syl[i])
+		end
 	end
-	if ns.selftest then
-		ns.selftest.counters.spoken = (ns.selftest.counters.spoken or 0) + 1
+	if #items == 0 then
+		return nil, "no syllables in " .. table.concat(readings, " ")
 	end
-	return names
+	local length = chain(items, gen, not items[1].stem)
+	local names = {}
+	for i, item in ipairs(items) do
+		names[i] = item.stem and ("words/" .. item.stem) or item.name
+	end
+	count("spoken")
+	return names, length
+end
+
+-- Speaks a reading ("nǐ hǎo"): the word's bank file when `word` is in the bank with that reading, else the
+-- syllables. Returns the bank names queued ({ "words/ni2hao3" } for a bank word), or nil and why nothing plays.
+function Sound.speak(reading, word)
+	return Sound.speakParts({ { reading = reading, word = word } })
+end
+
+-- Whether Data/SoundIndex.lua loaded (selftest.soundIndex): it is the companion's file, gitignored, and listed in
+-- the TOC, so a PC without a bank build has none. noReading counts rows from an index older than the reading check
+-- (they play syllables until `wah bank build` rewrites it).
+function Sound.indexSummary()
+	local index = ns.Data and ns.Data.wordSound
+	if type(index) ~= "table" then
+		return { loaded = false, entries = 0 }
+	end
+	local n, noReading = 0, 0
+	for _, e in pairs(index) do
+		n = n + 1
+		if type(e) ~= "table" or type(e[3]) ~= "string" then
+			noReading = noReading + 1
+		end
+	end
+	return { loaded = true, entries = n, noReading = noReading > 0 and noReading or nil }
 end
 
 -- After a held hover: speaks the word (bank file or reading) if ctx is still the open card (Card.ctx)
