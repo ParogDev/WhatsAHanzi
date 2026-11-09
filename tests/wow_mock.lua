@@ -98,8 +98,9 @@ local function newFontString(template)
 end
 
 local function newAnimationGroup(parent)
-	local ag = setmetatable({ _parent = parent, _playing = false }, anyMethod)
-	function ag:CreateAnimation()
+	local ag = setmetatable({ _parent = parent, _playing = false, _types = {} }, anyMethod)
+	function ag:CreateAnimation(kind)
+		self._types[#self._types + 1] = kind
 		return setmetatable({}, anyMethod)
 	end
 	function ag:Play()

@@ -248,6 +248,70 @@ describe("Card", function()
 			end
 		end
 	end)
+
+	-- The card's text came out smeared and overlapping after a while of play, until /reload: the client's
+	-- glyph cache filled with every Han character drawn at every size the card used, the entrance's Scale
+	-- animation adding in-between sizes on each hover. The pool must stay flat and the sizes few and fixed.
+	it("reuses its FontStrings and draws at three fixed sizes, with no Scale animation", function()
+		ns.Data.live = live
+		local words = { "灰谷", "联盟", "猎人", "我", "被", "了" }
+		local link = "addon:WhatsAHanzi:" .. line.hash .. ":"
+		local region = CreateFrame("Frame")
+		for i = 1, #line.tokens do
+			ns.Card.enter(_G.ChatFrame1, link .. i, line.tokens[i].word, region, 10, 2, 30, 14)
+		end
+		local after = ns.Card.poolSummary()
+		for round = 1, 30 do
+			for i = 1, #line.tokens do
+				ns.Card.enter(_G.ChatFrame1, link .. i, line.tokens[i].word, region, 10, 2, 30, 14)
+			end
+			ns.Card.enterWord(_G.UIParent, words[round % #words + 1])
+			ns.Card.leave()
+		end
+		assert.is_nil(mock.lastError)
+		local s = ns.Card.poolSummary()
+		assert.equal(after.created, s.created)
+		assert.equal(s.peak, s.created)
+		assert.equal(after.shows + 30 * (#line.tokens + 1), s.shows)
+		assert.equal("12,14,28", s.sizes)
+		local card
+		for _, f in ipairs(mock.frames) do
+			if f._name == "WhatsAHanziCard" then
+				card = f
+			end
+		end
+		-- No Scale anywhere: the card's entrance and exit, and the highlight's.
+		local highlight
+		for _, f in ipairs(mock.frames) do
+			if f._name == "WhatsAHanziCardHighlight" then
+				highlight = f
+			end
+		end
+		for _, ag in ipairs({ card.anim, card.out, highlight.anim, highlight.out }) do
+			assert.same({ "Alpha" }, ag._types)
+		end
+		-- SetFont runs only when a pooled FontString changes font or size.
+		local calls = 0
+		for _, fs in ipairs(card.pool.fs) do
+			local orig = fs.SetFont
+			fs.SetFont = function(...)
+				calls = calls + 1
+				return orig(...)
+			end
+		end
+		ns.Card.enterWord(_G.UIParent, "灰谷")
+		local again = calls
+		ns.Card.enterWord(_G.UIParent, "灰谷")
+		assert.equal(again, calls)
+		-- Unused pool entries are hidden, not left showing old text under the new.
+		local shown = 0
+		for _, fs in ipairs(card.pool.fs) do
+			shown = shown + (fs:IsShown() and 1 or 0)
+		end
+		assert.equal(card.pool.nfs, shown)
+		-- The selftest carries the same summary, so the verify loop sees growth after a /reload.
+		assert.same(ns.Card.poolSummary(), ns.selftest.snapshot("test").cardPool)
+	end)
 end)
 
 describe("Card.linkRects (a hovered word that wraps over chat rows)", function()
