@@ -109,8 +109,42 @@ function selftest.liveSummary()
 	return { generatedAt = live.generatedAt, model = live.model, lines = n }
 end
 
+-- Where ChatFrame1 sits, for the companion's overlay to dock against: UI units (origin bottom-left), the frame's
+-- effective scale, and the client size in pixels. A failure names the link that broke instead of a bare nil.
+function selftest.chatRect()
+	local f = _G.ChatFrame1
+	if not f or not f.GetRect then
+		return { why = "ChatFrame1 missing" }
+	end
+	local ok, left, bottom, width, height = pcall(f.GetRect, f)
+	if not ok then
+		return { why = "ChatFrame1:GetRect: " .. tostring(left) }
+	end
+	if not left then
+		return { why = "ChatFrame1:GetRect returned nil (frame not laid out yet)" }
+	end
+	local screenW, screenH
+	local physical = _G.GetPhysicalScreenSize -- in Forever's GlobalAPI.lua; not in every luacheck globals list
+	if physical then
+		screenW, screenH = physical()
+	end
+	return {
+		left = left,
+		bottom = bottom,
+		width = width,
+		height = height,
+		scale = f:GetEffectiveScale(),
+		screenW = screenW,
+		screenH = screenH,
+	}
+end
+
 function selftest.snapshot(phase)
 	local version, build, _, interface = GetBuildInfo()
+	local rect = selftest.chatRect()
+	if not rect.why then
+		ns.db.ui.chatRect = rect -- the companion reads it from SavedVariables (plan §1 Docking)
+	end
 	local s = {
 		version = ns.version(),
 		clientVersion = version,
@@ -140,6 +174,7 @@ function selftest.snapshot(phase)
 		cardLineMiss = selftest.cardLineMiss,
 		cardPool = ns.Card and ns.Card.poolSummary() or nil,
 		options = selftest.options,
+		ui = { chatRect = rect },
 	}
 	ns.db.selftest = s
 	return s
@@ -150,6 +185,26 @@ local function print(msg)
 end
 ns.print = print
 
+-- `/hanzi fake <scene>`: three invented lines each (invented speakers), printed into ChatFrame1 with hover links
+-- like `/hanzi test`, so the card can be tried with nobody online. { channel kind, speaker, text }.
+ns.fakeScenes = {
+	banter = {
+		{ "GUILD", "Baiyun", "大家晚上好，今天谁去副本" },
+		{ "GUILD", "Tiedan", "我刚在灰谷被联盟猎人射爆了" },
+		{ "GUILD", "Huahua", "哈哈哈太惨了，要不要帮忙" },
+	},
+	yell = {
+		{ "YELL", "Dazhuang", "谁抢了我的怪！" },
+		{ "SAY", "Feifei", "我先打的，你看清楚" },
+		{ "YELL", "Dazhuang", "好吧，组一下一起打" },
+	},
+	lfg = {
+		{ "CHANNEL", "Yeying", "死亡矿井缺T缺奶，来的密" },
+		{ "CHANNEL", "Shitou", "出恐惧之刃 50G 不议价" },
+		{ "GUILD", "Jinqian", "这刀太贵了吧" },
+	},
+}
+
 local function onSlash(input)
 	local cmd, rest = strsplit(" ", (input or ""):lower(), 2)
 	if cmd == "" or cmd == "toggle" then
@@ -157,6 +212,25 @@ local function onSlash(input)
 	elseif cmd == "test" and rest then
 		ns.Chat.process("SLASH", rest, "You")
 		print(ns.Chat.linkify(rest) or rest)
+	elseif cmd == "fake" then
+		local scene = ns.fakeScenes[rest or "banter"]
+		if not scene then
+			local names = {}
+			for name in pairs(ns.fakeScenes) do
+				names[#names + 1] = name
+			end
+			table.sort(names)
+			print("/hanzi fake " .. table.concat(names, " | ") .. " (invented lines, not sent to anyone)")
+		else
+			-- Linked like chat, but not through Chat.process: replays must not count toward "known" words.
+			for _, line in ipairs(scene) do
+				selftest.counters.fake = (selftest.counters.fake or 0) + 1
+				local frame = _G.ChatFrame1 or DEFAULT_CHAT_FRAME
+				frame:AddMessage(
+					"[fake " .. line[1]:lower() .. "] " .. line[2] .. ": " .. (ns.Chat.linkify(line[3]) or line[3])
+				)
+			end
+		end
 	elseif cmd == "chat" then
 		if rest == "on" or rest == "off" then
 			ns.db.ui.inChat = rest == "on"
