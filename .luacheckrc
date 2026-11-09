@@ -21,6 +21,7 @@ else
 		"Settings", "InCombatLockdown", "C_GuildInfo", "IsShiftKeyDown", "IsControlKeyDown", "IsAltKeyDown",
 		"CreateSettingsListSectionHeaderInitializer", "WOW_PROJECT_CAMELOT",
 		"PlaySoundFile", "StopSound", "C_CVar", "hooksecurefunc", "NUM_CHAT_WINDOWS",
+		"GetPhysicalScreenSize", "ChatFrame1",
 	}
 end
 -- A GlobalStrings constant, not in the generated API list.
