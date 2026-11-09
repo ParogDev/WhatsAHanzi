@@ -11,6 +11,10 @@ ignore:
   # The companion app's file: other people's chat, written on this PC only. The example documents the shape.
   - Data/Local.lua
   - Data/Local.example.lua
+  # The word sound bank and its index: built on this PC by the companion, never shipped.
+  - Sounds/words
+  - Data/SoundIndex.lua
+  - Data/SoundIndex.example.lua
   # The Forever client refuses addon font files (README "Fonts"): keep the 10 MB Noto subset in the repo,
   # out of the release zip, until a client build accepts it. Font.detect() records the missing file as refused.
   - Fonts/NotoSansSC-Regular.ttf

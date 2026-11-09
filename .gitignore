@@ -3,3 +3,6 @@
 .release/
 # Written by the companion app on this PC: other people's chat, never committed.
 Data/Local.lua
+# The word sound bank, built on this PC by the companion (`wah bank build`), and its index.
+Sounds/words/
+Data/SoundIndex.lua

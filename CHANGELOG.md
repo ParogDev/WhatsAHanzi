@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Word sounds: a hovered word the companion has recorded whole (`Data/SoundIndex.lua`, files in `Sounds/words/`) plays as one file, with the tone changes of real speech, instead of syllable by syllable. Words without a recording still play syllables. Both are built on your PC by the companion and are not in the release zip. A recording plays only when the card shows the reading it was made for, so a word with two readings (行 háng/xíng) never says the other one. `/hanzi speak` segments the text like chat and plays each word in turn. The selftest counts `wordSounds`, `wordMiss` and `wordReadingDiffers` beside `syllables`, and `soundIndex` says whether the index loaded. Needs a client restart once (new file in the TOC).
 - `/hanzi fake banter | yell | lfg` prints three invented Chinese lines into the chat window with hover links, to try the card when nobody is online. They do not count toward known words.
 - The selftest and `WhatsAHanziDB.ui.chatRect` record where the chat frame sits (position, size, scale, screen size), so the companion's overlay can dock beside it.
 - The hover card no longer turns smeared and overlapping after a while of play (only `/reload` cleared it). The card fades in without the small zoom, and uses three text sizes instead of five, which is the most likely reason the client's glyph cache kept filling up.

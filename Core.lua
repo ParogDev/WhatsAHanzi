@@ -158,6 +158,9 @@ function selftest.snapshot(phase)
 		-- Sound.lua is a new TOC file and Sounds/ new files: a /reload alone loads neither, a restart does.
 		soundProbe = (ns.Sound and ns.Sound.result) or "Sound.lua not loaded (restart the client)",
 		soundMiss = selftest.soundMiss,
+		wordMiss = selftest.wordMiss,
+		-- Data/SoundIndex.lua is the companion's gitignored file: { loaded, entries } says whether this reload had it.
+		soundIndex = ns.Sound and ns.Sound.indexSummary() or nil,
 		counters = selftest.counters,
 		dictWords = ns.Dict.count(),
 		-- Data/Game.lua is a new TOC file: a /reload alone does not load it, only a client restart does.
@@ -203,6 +206,18 @@ ns.fakeScenes = {
 		{ "GUILD", "Jinqian", "这刀太贵了吧" },
 	},
 }
+
+-- `/hanzi speak <text>`'s words: the text segmented as chat is (Dict.segment), one { reading, word } per Han token
+-- with the reading its card shows; Latin, digits and punctuation are left out.
+function ns.speakParts(text)
+	local parts = {}
+	for _, tok in ipairs(ns.Dict.segment(text)) do
+		if tok.han then
+			parts[#parts + 1] = { reading = ns.Card.reading({ chars = ns.Card.charReadings(tok) }), word = tok.word }
+		end
+	end
+	return parts
+end
 
 local function onSlash(input)
 	local cmd, rest = strsplit(" ", (input or ""):lower(), 2)
@@ -295,19 +310,14 @@ local function onSlash(input)
 			print("/hanzi size <10-48> (now " .. tostring(ns.db.ui.fontSize or ns.UI.DEFAULT_FONT_SIZE) .. ")")
 		end
 	elseif cmd == "speak" then
-		-- /hanzi speak 你好: the words' readings through the syllable bank, as a hover would.
+		-- /hanzi speak 你好朋友: the text segmented as chat is; each word as a hover would speak it (its word-bank
+		-- file when the index has it with the card's reading, else its syllables), one after the other.
 		local text = rest and (input or ""):match("^%s*%S+%s+(.+)$")
 		if not text then
 			local r = ns.Sound.result
 			print("/hanzi speak <chinese text>; sound probe: " .. tostring(r and r.status or "not run"))
 		else
-			local parts = {}
-			for _, tok in ipairs(ns.Dict.segment(text)) do
-				if tok.han then
-					parts[#parts + 1] = ns.Card.reading({ chars = ns.Card.charReadings(tok) })
-				end
-			end
-			local names, why = ns.Sound.speak(table.concat(parts, " "))
+			local names, why = ns.Sound.speakParts(ns.speakParts(text))
 			print(names and table.concat(names, " ") or ("|cffff6060" .. tostring(why) .. "|r"))
 		end
 	elseif cmd == "vocab" then
