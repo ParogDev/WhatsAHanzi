@@ -401,7 +401,8 @@ function M.load(dir, file, ns)
 end
 
 -- Loads the whole addon in TOC order (minus Core.lua when skipCore) into a fresh namespace.
--- Data/Local.lua is the companion's file and is not loaded: tests set ns.Data.live themselves.
+-- Data/Local.lua and Data/SoundIndex.lua are the companion's files and are not loaded: tests set
+-- ns.Data.live and ns.Data.wordSound themselves.
 function M.loadAddon(dir, opts)
 	opts = opts or {}
 	local ns = {}

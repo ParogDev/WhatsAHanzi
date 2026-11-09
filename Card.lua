@@ -770,7 +770,7 @@ function Card.enter(chatFrame, link, text, region, left, bottom, width, height)
 	showHighlight(ctx)
 	showKeys(true)
 	if data and ns.Sound then -- Sound.lua is a new TOC file: absent until a client restart
-		ns.Sound.speakHover(ctx, Card.reading(data))
+		ns.Sound.speakHover(ctx, Card.reading(data), data.word)
 	end
 end
 
@@ -790,7 +790,7 @@ function Card.enterWord(anchor, word)
 	end
 	showKeys(true)
 	if data and ns.Sound then
-		ns.Sound.speakHover(ctx, Card.reading(data))
+		ns.Sound.speakHover(ctx, Card.reading(data), data.word)
 	end
 end
 

@@ -307,7 +307,8 @@ local function onSlash(input)
 					parts[#parts + 1] = ns.Card.reading({ chars = ns.Card.charReadings(tok) })
 				end
 			end
-			local names, why = ns.Sound.speak(table.concat(parts, " "))
+			-- One word typed whole (/hanzi speak 你好) plays its word-bank file when the index has it.
+			local names, why = ns.Sound.speak(table.concat(parts, " "), text:match("^%s*(.-)%s*$"))
 			print(names and table.concat(names, " ") or ("|cffff6060" .. tostring(why) .. "|r"))
 		end
 	elseif cmd == "vocab" then

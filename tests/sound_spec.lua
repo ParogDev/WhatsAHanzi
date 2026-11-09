@@ -220,6 +220,80 @@ describe("Sound", function()
 		end)
 	end)
 
+	describe("word bank", function()
+		local queued
+		before_each(function()
+			queued = {}
+			_G.C_Timer.After = function(_, fn)
+				queued[#queued + 1] = fn
+			end
+			ns.Sound.probe()
+			played = {}
+		end)
+
+		it("plays one file for a word in the index and counts it as a word sound", function()
+			ns.Data.wordSound = { ["你好"] = { "ni2hao3", 820 } }
+			assert.same({ "words/ni2hao3" }, ns.Sound.speak("nǐ hǎo", "你好"))
+			assert.equal(1, #played)
+			assert.equal("Interface\\AddOns\\WhatsAHanzi\\Sounds\\words\\ni2hao3.ogg", played[1].path)
+			assert.equal("Master", played[1].channel)
+			assert.equal(0, #queued) -- no syllable chain behind it
+			assert.equal(1, ns.selftest.counters.wordSounds)
+			assert.is_nil(ns.selftest.counters.syllables)
+			assert.equal(1, ns.selftest.counters.spoken)
+		end)
+
+		it("plays the syllables for a word not in the index", function()
+			ns.Data.wordSound = { ["你好"] = { "ni2hao3", 820 } }
+			assert.same({ "dui4", "bu5", "qi3" }, ns.Sound.speak("duì bu qǐ", "对不起"))
+			for _, fn in ipairs(queued) do
+				fn()
+			end
+			assert.equal(3, #played)
+			assert.equal(3, ns.selftest.counters.syllables)
+			assert.is_nil(ns.selftest.counters.wordSounds)
+		end)
+
+		it("treats a missing index as empty", function()
+			ns.Data.wordSound = nil
+			assert.is_nil(ns.Sound.wordStem("你好"))
+			assert.same({ "ni3", "hao3" }, ns.Sound.speak("nǐ hǎo", "你好"))
+			assert.truthy(played[1].path:find("\\Sounds\\ni3.ogg", 1, true))
+		end)
+
+		it("ignores secret words and malformed entries", function()
+			ns.Data.wordSound = { ["你好"] = { "ni2hao3", 820 }, ["一起"] = { "../x", 1 }, ["好"] = "hao3" }
+			_G.issecretvalue = function(v)
+				return v == "你好"
+			end
+			assert.is_nil(ns.Sound.wordStem("你好"))
+			assert.is_nil(ns.Sound.wordStem("一起"))
+			assert.is_nil(ns.Sound.wordStem("好"))
+			assert.is_nil(ns.Sound.wordStem(nil))
+		end)
+
+		it("falls back to the syllables when the client refuses the word file", function()
+			ns.Data.wordSound = { ["你好"] = { "ni2hao3", 820 } }
+			_G.PlaySoundFile = function(path, channel)
+				played[#played + 1] = { path = path, channel = channel }
+				return not path:find("words", 1, true), #played
+			end
+			assert.same({ "ni3", "hao3" }, ns.Sound.speak("nǐ hǎo", "你好"))
+			assert.equal("words/ni2hao3", ns.selftest.soundMiss.name)
+			assert.equal(1, ns.selftest.counters.syllables)
+		end)
+
+		it("passes the hovered word through a held hover", function()
+			ns.Data.wordSound = { ["你好"] = { "ni2hao3", 820 } }
+			local ctx = {}
+			ns.Card.ctx = ctx
+			ns.Sound.speakHover(ctx, "nǐ hǎo", "你好")
+			queued[1]()
+			assert.equal(1, #played)
+			assert.truthy(played[1].path:find("words\\ni2hao3.ogg", 1, true))
+		end)
+	end)
+
 	describe("card", function()
 		it("reads the ruby row and puts the kind icon before a glossary term", function()
 			assert.equal("nǐ hǎo", ns.Card.reading({ chars = { { py = "nǐ" }, { py = "hǎo" } } }))

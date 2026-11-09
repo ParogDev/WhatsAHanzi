@@ -1,4 +1,5 @@
--- Speaks a hovered word one syllable at a time from the syllable bank in Sounds/ (<syl><tone>.ogg, ü written
+-- Speaks a hovered word: its own file from the word bank in Sounds/words/ when Data/SoundIndex.lua lists it,
+-- else one syllable at a time from the syllable bank in Sounds/ (<syl><tone>.ogg, ü written
 -- as v, neutral tone 5; rendered by the companion's gen_audio.py with Kokoro). Sound.names is pure and keeps
 -- parity with the companion's wah.audio.syllables; Sound.probe checks at login that the client plays addon
 -- .ogg files at all (the same client refuses addon fonts, Font.lua).
@@ -174,11 +175,62 @@ function Sound.length(name)
 	return math.max(ms / 1000 - Sound.OVERLAP, 0.1)
 end
 
--- Speaks a reading ("nǐ hǎo"). Returns the bank names queued, or nil and why nothing plays.
-function Sound.speak(reading)
+-- The word bank (Phase 5d): Sounds/words/<stem>.ogg, one file per spoken (post-sandhi) reading, listed in
+-- Data/SoundIndex.lua as ns.Data.wordSound[word] = { stem, ms }. The companion writes the index and lists only
+-- files older than the client's start (a newer file would not play until a restart). No index: syllables only.
+Sound.WORDS = Sound.DIR .. "words\\"
+
+-- The bank stem for a word, or nil: not in the index, no index, a secret value, or a malformed entry.
+function Sound.wordStem(word)
+	if type(word) ~= "string" or word == "" then
+		return nil
+	end
+	if issecretvalue and issecretvalue(word) then
+		return nil
+	end
+	local index = ns.Data and ns.Data.wordSound
+	local entry = type(index) == "table" and index[word]
+	local stem = type(entry) == "table" and entry[1]
+	if type(stem) ~= "string" or not stem:match("^[%w_]+$") then
+		return nil
+	end
+	return stem
+end
+
+-- Plays the word's file once. False when the client refused it (recorded in selftest.soundMiss).
+local function playWord(stem)
+	local st = ns.selftest
+	local okCall, willPlay, handle = pcall(PlaySoundFile, Sound.WORDS .. stem .. ".ogg", Sound.CHANNEL)
+	if okCall and willPlay then
+		handles[#handles + 1] = handle
+		if st then
+			st.counters.wordSounds = (st.counters.wordSounds or 0) + 1
+		end
+		return true
+	end
+	if st then
+		st.soundMiss = { name = "words/" .. stem, error = not okCall and tostring(willPlay) or nil }
+	end
+	return false
+end
+
+-- Speaks a reading ("nǐ hǎo"). With `word` in the word bank, its one file plays instead of the syllables.
+-- Returns the bank names queued ({ "words/ni2hao3" } for a bank word), or nil and why nothing plays.
+function Sound.speak(reading, word)
 	local ok, why = Sound.ready()
 	if not ok then
 		return nil, why
+	end
+	local stem = type(PlaySoundFile) == "function" and Sound.wordStem(word)
+	if stem then
+		Sound.stop()
+		if playWord(stem) then
+			if ns.selftest then
+				ns.selftest.counters.spoken = (ns.selftest.counters.spoken or 0) + 1
+			end
+			return { "words/" .. stem }
+		end
+		-- Refused (a broken file): the syllable chain below still speaks the word.
 	end
 	local names = Sound.names(reading)
 	if #names == 0 then
@@ -201,14 +253,15 @@ function Sound.speak(reading)
 	return names
 end
 
--- After a held hover: speaks the reading if ctx is still the open card (Card.ctx) after Sound.DELAY.
-function Sound.speakHover(ctx, reading)
+-- After a held hover: speaks the word (bank file or reading) if ctx is still the open card (Card.ctx)
+-- after Sound.DELAY.
+function Sound.speakHover(ctx, reading, word)
 	if not Sound.enabled() or not Sound.ready() or not (C_Timer and C_Timer.After) then
 		return
 	end
 	C_Timer.After(Sound.DELAY, function()
 		if ns.Card.ctx == ctx then
-			Sound.speak(reading)
+			Sound.speak(reading, word)
 		end
 	end)
 end
