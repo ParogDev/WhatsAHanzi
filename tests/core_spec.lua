@@ -112,14 +112,15 @@ describe("Core and Chat", function()
 
 	it("/hanzi fake prints invented lines with links and leaves vocabulary alone", function()
 		ns.frame._OnEvent(ns.frame, "PLAYER_LOGIN") -- registers the slash command
-		local before = #ChatFrame1._messages
+		local chat = _G.ChatFrame1
+		local before = #chat._messages
 		local chinese = ns.selftest.counters.chinese
-		SlashCmdList.WHATSAHANZI("fake yell")
-		assert.equal(before + 3, #ChatFrame1._messages)
+		_G.SlashCmdList.WHATSAHANZI("fake yell")
+		assert.equal(before + 3, #chat._messages)
 		assert.equal(3, ns.selftest.counters.fake)
 		assert.equal(chinese, ns.selftest.counters.chinese)
-		SlashCmdList.WHATSAHANZI("fake nope")
-		local said = DEFAULT_CHAT_FRAME._messages
+		_G.SlashCmdList.WHATSAHANZI("fake nope")
+		local said = _G.DEFAULT_CHAT_FRAME._messages
 		assert.truthy(said[#said]:find("banter | lfg | yell", 1, true))
 	end)
 end)

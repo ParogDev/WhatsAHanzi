@@ -124,8 +124,9 @@ function selftest.chatRect()
 		return { why = "ChatFrame1:GetRect returned nil (frame not laid out yet)" }
 	end
 	local screenW, screenH
-	if GetPhysicalScreenSize then
-		screenW, screenH = GetPhysicalScreenSize()
+	local physical = _G.GetPhysicalScreenSize -- in Forever's GlobalAPI.lua; not in every luacheck globals list
+	if physical then
+		screenW, screenH = physical()
 	end
 	return {
 		left = left,
