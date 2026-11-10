@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- Hovering a word in a chat tab other than the first (guild chat on a "Social" tab) showed no card and played no sound: a leave from another chat frame closed the card at once. Only the card's own chat frame closes it now, or any frame once that tab is hidden.
+- `selftest.hover` logs the last six chat hovers: the chat frame, whether the card was built or why not, where it went, whether it was still up a frame later, how long until the leave and from which frame, and what the sound did. `counters.cards` now counts cards actually shown; a hover without a card counts in `cardMiss` or in `hover.misses`.
+
 ## 0.1.0 (2026-11-10)
 
 First release. Version 0.1.0 because nothing earlier named one: the addon is usable but young.

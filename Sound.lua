@@ -386,14 +386,31 @@ function Sound.indexSummary()
 end
 
 -- After a held hover: speaks the word (bank file or reading) if ctx is still the open card (Card.ctx)
--- after Sound.DELAY.
+-- after Sound.DELAY. Returns what happened, for selftest.hover: "queued", or why nothing will play. When the
+-- delay ends, ctx.diag.speak (if present) becomes "spoken", "left before the delay" or why the bank refused.
 function Sound.speakHover(ctx, reading, word)
-	if not Sound.enabled() or not Sound.ready() or not (C_Timer and C_Timer.After) then
-		return
+	if not Sound.enabled() then
+		return "speak option off"
+	end
+	local ok, why = Sound.ready()
+	if not ok then
+		return why or "not ready"
+	end
+	if not (C_Timer and C_Timer.After) then
+		return "C_Timer.After missing"
 	end
 	C_Timer.After(Sound.DELAY, function()
-		if ns.Card.ctx == ctx then
-			Sound.speak(reading, word)
+		local diag = ctx.diag
+		if ns.Card.ctx ~= ctx then
+			if diag then
+				diag.speak = "left before the delay"
+			end
+			return
+		end
+		local names, miss = Sound.speak(reading, word)
+		if diag then
+			diag.speak = names and "spoken" or ("refused: " .. tostring(miss))
 		end
 	end)
+	return "queued"
 end

@@ -233,6 +233,8 @@ function selftest.snapshot(phase)
 		motdLink = selftest.motdLink,
 		cardLineMiss = selftest.cardLineMiss,
 		cardPool = ns.Card and ns.Card.poolSummary() or nil,
+		-- Each chat hover from enter to leave (Card.hoverSummary): where a card nobody saw broke.
+		hover = ns.Card and ns.Card.hoverSummary() or nil,
 		options = selftest.options,
 		chatLogging = selftest.chatLogging,
 		recent = ns.Chat and ns.Chat.recentState or nil,

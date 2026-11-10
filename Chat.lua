@@ -570,9 +570,10 @@ function Chat.hookChatFrames()
 		end,
 		Chat
 	)
-	EventRegistry:RegisterCallback("ChatFrame.OnHyperlinkLeave", function()
+	-- The leaving frame decides: a leave from another chat frame does not close a card opened in this one.
+	EventRegistry:RegisterCallback("ChatFrame.OnHyperlinkLeave", function(_, chatFrame)
 		if ns.Card then
-			ns.Card.leave()
+			ns.Card.leave(chatFrame)
 		end
 	end, Chat)
 	hook.hover = true

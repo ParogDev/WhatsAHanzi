@@ -692,6 +692,69 @@ function Card.show(ctx)
 	return data
 end
 
+-- Hover diagnostics (selftest.hover): each chat hover from enter to leave, so a card nobody saw says where it
+-- broke: which chat frame, whether the card was built (why not), where it was put, whether it was still up a
+-- frame later, how long until the leave and from which frame, and what the sound did.
+Card.HOVER_KEEP = 6
+local hoverLog = { enters = 0, shown = 0, misses = 0, strayLeaves = 0, quickLeaves = 0, last = {} }
+Card.hoverLog = hoverLog
+
+local function frameName(f)
+	local ok, name = pcall(function()
+		return f and f.GetName and f:GetName()
+	end)
+	if ok and type(name) == "string" and not ns.Chat.isSecret(name) then
+		return name
+	end
+	return f and "(unnamed)" or nil
+end
+
+-- The first named frame above region: the chat frame the hovered FontString lives in.
+local function ownerName(region)
+	local f = region
+	for _ = 1, 6 do
+		f = f and f.GetParent and f:GetParent()
+		local name = f and frameName(f)
+		if name and name ~= "(unnamed)" then
+			return name
+		end
+	end
+	return nil
+end
+
+local function round1(v)
+	return type(v) == "number" and math.floor(v * 10 + 0.5) / 10 or nil
+end
+
+-- The card's rect on screen in its own units, and its effective scale; nil fields for a frame not laid out.
+local function rectOf(f)
+	if not (f and f.GetLeft) then
+		return nil
+	end
+	return {
+		left = round1(f:GetLeft()),
+		bottom = round1(f:GetBottom()),
+		width = round1(f:GetWidth()),
+		height = round1(f:GetHeight()),
+		scale = round1(f.GetEffectiveScale and f:GetEffectiveScale()),
+	}
+end
+
+local function now()
+	return GetTime and GetTime() or 0
+end
+
+local function logHover(entry)
+	local last = hoverLog.last
+	table.insert(last, 1, entry)
+	last[Card.HOVER_KEEP + 1] = nil
+end
+
+-- selftest.hover: the counts and the last few hovers, newest first.
+function Card.hoverSummary()
+	return hoverLog
+end
+
 -- Entry from the chat frame hover (Chat.hookChatFrames). Resolves the line from the cache, else from the
 -- chat frame's recent messages; records the first hover's bounds in the selftest.
 function Card.enter(chatFrame, link, text, region, left, bottom, width, height)
@@ -709,6 +772,9 @@ function Card.enter(chatFrame, link, text, region, left, bottom, width, height)
 	if not hash then
 		return
 	end
+	hoverLog.enters = hoverLog.enters + 1
+	local entry = { frame = frameName(chatFrame), regionIn = ownerName(region), at = now() }
+	logHover(entry)
 	-- The hover's text is the whole escape sequence (|H...|h上下|h, as for OnHyperlinkClick), not the bare
 	-- word; plainText reduces it, and returns nil for a secret, which is never compared or segmented.
 	text = ns.Chat.plainText(text)
@@ -727,6 +793,8 @@ function Card.enter(chatFrame, link, text, region, left, bottom, width, height)
 		if not line then
 			st.cardLineMiss = why or "line not cached"
 			if type(text) ~= "string" or not ns.Han.hasHan(text) then
+				hoverLog.misses = hoverLog.misses + 1
+				entry.why = "line: " .. st.cardLineMiss
 				return
 			end
 			-- The hovered text alone, without its hash: its translation would belong to the whole line.
@@ -749,18 +817,41 @@ function Card.enter(chatFrame, link, text, region, left, bottom, width, height)
 		bottom = bottom,
 		width = width,
 		height = height,
+		diag = entry,
 	}
 	local rectsWhy
 	ctx.rects, rectsWhy = Card.linkRects(region, link, left, bottom, width, height)
 	st.cardRows = ctx.rects and #ctx.rects or 0
 	st.cardRowsMiss = rectsWhy
+	entry.rows, entry.rowsMiss = st.cardRows, rectsWhy
 	Card.ctx = ctx
-	st.counters.cards = (st.counters.cards or 0) + 1
-	local ok, data = pcall(Card.show, ctx)
+	local ok, data, why = pcall(Card.show, ctx)
 	if not ok then
 		st.lastError = "card: " .. tostring(data)
+		entry.why = "error"
 		geterrorhandler()(data)
 		return
+	end
+	-- counters.cards counts cards built and placed; a hover that built none says why in cardMiss.
+	if not data then
+		hoverLog.misses = hoverLog.misses + 1
+		st.counters.cardMiss = (st.counters.cardMiss or 0) + 1
+		entry.why = "build: " .. tostring(why)
+		Card.ctx = nil -- no card for this hover: nothing for the keys or the sound to act on
+		return
+	end
+	st.counters.cards = (st.counters.cards or 0) + 1
+	hoverLog.shown = hoverLog.shown + 1
+	entry.shown = true
+	entry.rect = rectOf(card)
+	-- One frame later: still the open card, and visible? A card taken down at once (a leave, a hidden parent) shows
+	-- here, not as silence.
+	if C_Timer and C_Timer.After then
+		C_Timer.After(0, function()
+			entry.open = Card.ctx == ctx
+			entry.visible = card and card:IsVisible() or false
+			entry.alpha = card and card.GetEffectiveAlpha and round1(card:GetEffectiveAlpha()) or nil
+		end)
 	end
 	-- The companion wrote lines but not this one: a hash mismatch shows up here, not as silence.
 	local live = ns.Data and ns.Data.live
@@ -769,8 +860,11 @@ function Card.enter(chatFrame, link, text, region, left, bottom, width, height)
 	end
 	showHighlight(ctx)
 	showKeys(true)
-	if data and ns.Sound then -- Sound.lua is a new TOC file: absent until a client restart
-		ns.Sound.speakHover(ctx, Card.reading(data), data.word)
+	if ns.Sound then -- Sound.lua is a new TOC file: absent until a client restart
+		local queued = ns.Sound.speakHover(ctx, Card.reading(data), data.word)
+		entry.speak = entry.speak or queued -- a timer that already ran wrote the outcome; keep it
+	else
+		entry.speak = "Sound.lua not loaded"
 	end
 end
 
@@ -794,7 +888,28 @@ function Card.enterWord(anchor, word)
 	end
 end
 
-function Card.leave()
+-- fromFrame: the chat frame whose OnHyperlinkLeave fired (nil from the pane). A leave from another chat frame than
+-- the one the open card came from (a docked tab hidden, another window refreshing its lines) is not this hover's
+-- end: it is counted and the card stays.
+function Card.leave(fromFrame)
+	local ctx = Card.ctx
+	-- Unless the card's own frame is gone from the screen (its tab hidden): then no leave of its own will come.
+	local ownGone = ctx and ctx.chatFrame and ctx.chatFrame.IsVisible and not ctx.chatFrame:IsVisible()
+	if ctx and ctx.chatFrame and fromFrame and fromFrame ~= ctx.chatFrame and not ownGone then
+		hoverLog.strayLeaves = hoverLog.strayLeaves + 1
+		hoverLog.lastStray = { from = frameName(fromFrame), open = frameName(ctx.chatFrame) }
+		return
+	end
+	local entry = ctx and ctx.diag
+	if entry and entry.at and not entry.leftMs then
+		local held = now() - entry.at
+		entry.leftMs = math.floor(held * 1000 + 0.5)
+		entry.leaveFrom = frameName(fromFrame)
+		-- Left before the sound's delay: the mouse moved on, or the chat frame redrew the line under it.
+		if ns.Sound and held < ns.Sound.DELAY then
+			hoverLog.quickLeaves = hoverLog.quickLeaves + 1
+		end
+	end
 	Card.ctx = nil
 	showKeys(false)
 	if ns.Sound then
