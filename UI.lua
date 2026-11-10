@@ -317,13 +317,21 @@ local function create()
 	Strip.layout()
 	show(Strip.calibration())
 	stripFrame:Show()
+	local ev = CreateFrame("Frame")
+	ev:RegisterEvent("UI_SCALE_CHANGED")
+	ev:RegisterEvent("DISPLAY_SIZE_CHANGED")
+	ev:SetScript("OnEvent", function()
+		Strip.layout()
+		-- the physical size may lag the event by a frame
+		C_Timer.After(1, Strip.layout)
+	end)
 end
 
 -- Show the next queued chunk for HOLD seconds, then the next, then the calibration frame.
 local function step()
 	local nib = table.remove(queue, 1)
 	stripState.queued = #queue
-	if not nib then
+	if not nib or not stripOn() then
 		holding = false
 		show(Strip.calibration())
 		return
@@ -352,12 +360,12 @@ function Strip.push(event, text, sender, channel)
 	if not stripFrame then
 		create()
 	end
-	stripState.seq = stripState.seq % 255 + 1
 	local count = math.ceil(#msg / Strip.DATA_BYTES)
 	if count > 255 or #queue + count > Strip.MAX_QUEUE then
 		stripState.dropped = stripState.dropped + 1
 		return nil, "queue full"
 	end
+	stripState.seq = stripState.seq % 255 + 1
 	for idx = 0, count - 1 do
 		local p = {}
 		for i = 1, math.min(Strip.DATA_BYTES, #msg - idx * Strip.DATA_BYTES) do
@@ -380,16 +388,18 @@ function Strip.start()
 	if not stripState.on then
 		return
 	end
-	create()
-	local ev = CreateFrame("Frame")
-	ev:RegisterEvent("UI_SCALE_CHANGED")
-	ev:RegisterEvent("DISPLAY_SIZE_CHANGED")
-	ev:SetScript("OnEvent", Strip.layout)
+	if not stripFrame then
+		create()
+	end
 end
 
--- The setting changed: hide or show.
+-- The setting changed: hide or show. Off drops what was queued, so turning it on again shows nothing stale.
 function Strip.apply()
 	stripState.on = stripOn()
+	if not stripState.on then
+		queue = {}
+		stripState.queued = 0
+	end
 	if stripFrame then
 		stripFrame:SetShown(stripState.on)
 	elseif stripState.on then

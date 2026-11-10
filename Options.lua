@@ -174,6 +174,15 @@ function Options.register()
 	end)
 
 	local recent = addon("recent", ui, "Boolean", "Keep recent Chinese lines", true)
+	recent:SetValueChangedCallback(function()
+		-- off means nothing kept: the saved lines go too, so the companion stops reading them
+		if ns.db.ui.recent == false then
+			ns.db.recent = {}
+			if ns.Chat and ns.Chat.recentState then
+				ns.Chat.recentState.buffered = 0
+			end
+		end
+	end)
 	Settings.CreateCheckbox(
 		category,
 		recent,

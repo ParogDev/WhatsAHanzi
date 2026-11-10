@@ -469,10 +469,12 @@ frame:SetScript("OnEvent", function(self, event, ...)
 			ns.Chat.recentState.why = "recentRestore: " .. tostring(errRec)
 			geterrorhandler()(errRec)
 		end
-		local okStrip, errStrip = pcall(ns.Strip.start)
-		if not okStrip then
-			ns.Strip.state.why = "Strip.start: " .. tostring(errStrip)
-			geterrorhandler()(errStrip)
+		if ns.Strip then
+			local okStrip, errStrip = pcall(ns.Strip.start)
+			if not okStrip then
+				ns.Strip.state.why = "Strip.start: " .. tostring(errStrip)
+				geterrorhandler()(errStrip)
+			end
 		end
 		selftest.snapshot("login")
 		SLASH_WHATSAHANZI1 = "/hanzi"

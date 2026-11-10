@@ -640,7 +640,7 @@ function Chat.recentAdd(event, text, sender, channel)
 	end
 	filterSaw = nil
 	list[#list + 1] = e
-	if #list > Chat.RECENT_MAX then
+	if #list > Chat.RECENT_MAX or e.at - (list[1].at or e.at) > Chat.RECENT_MAX_AGE then
 		ns.db.recent = Chat.recentPrune(list, e.at)
 	end
 	lastRecent = e
@@ -707,7 +707,7 @@ function Chat.recentRestore()
 	local c = Chat.RESTORED_COLOR
 	for _, e in ipairs(list) do
 		local frame = (e.f and _G["ChatFrame" .. e.f]) or _G.ChatFrame1 or DEFAULT_CHAT_FRAME
-		if not isSecret(e.t) and type(e.t) == "string" then
+		if frame and frame.AddMessage and not isSecret(e.t) and type(e.t) == "string" then
 			frame:AddMessage(Chat.recentLine(e), c[1], c[2], c[3])
 			recentState.restored = recentState.restored + 1
 		end
