@@ -1,12 +1,16 @@
 package-as: WhatsAHanzi
 
+# Ship the hand-written CHANGELOG.md instead of the packager's dump of commit messages.
+manual-changelog:
+  filename: CHANGELOG.md
+  markup-type: markdown
+
 ignore:
   - tests
   - .github
   - .luacheckrc
   - .stylua.toml
   - .busted
-  - CHANGELOG.md
   - docs
   # The companion app's file: other people's chat, written on this PC only. The example documents the shape.
   - Data/Local.lua
