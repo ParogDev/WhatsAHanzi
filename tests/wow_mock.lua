@@ -187,6 +187,9 @@ local function newFrame(_, name)
 	function f:GetObjectType()
 		return "Frame"
 	end
+	function f:GetName()
+		return self._name
+	end
 	function f:GetFont()
 		return nil, 14
 	end

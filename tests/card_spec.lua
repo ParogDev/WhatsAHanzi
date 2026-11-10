@@ -181,6 +181,46 @@ describe("Card", function()
 		assert.is_nil(ns.Card.ctx)
 	end)
 
+	it("keeps a card opened in another chat tab when ChatFrame1 sends a leave, and logs the hover", function()
+		local social = CreateFrame("ScrollingMessageFrame", "ChatFrame4")
+		local region = CreateFrame("Frame")
+		region.GetParent = function()
+			return social
+		end
+		local link = "addon:WhatsAHanzi:" .. line.hash .. ":3"
+		ns.Chat.hookChatFrames()
+		mock.callbacks["ChatFrame.OnHyperlinkEnter"](social, link, "灰谷", region, 10, 2, 30, 14)
+		local h = ns.Card.hoverSummary()
+		assert.equal(1, h.enters)
+		assert.equal(1, h.shown)
+		local e = h.last[1]
+		assert.equal("ChatFrame4", e.frame)
+		assert.equal("ChatFrame4", e.regionIn)
+		assert.is_true(e.shown)
+		assert.is_true(e.open) -- C_Timer.After(0) runs at once in the mock
+		assert.is_true(e.visible)
+		assert.equal("string", type(e.speak)) -- "queued"/"spoken", or why not (the mock has no sound probe)
+		-- A leave from the General tab is not this hover's end.
+		mock.callbacks["ChatFrame.OnHyperlinkLeave"](_G.ChatFrame1)
+		assert.equal(1, h.strayLeaves)
+		assert.same({ from = "ChatFrame1", open = "ChatFrame4" }, h.lastStray)
+		assert.truthy(ns.Card.ctx)
+		-- Its own leave closes it and records how long it was held.
+		mock.callbacks["ChatFrame.OnHyperlinkLeave"](social)
+		assert.is_nil(ns.Card.ctx)
+		assert.equal("ChatFrame4", e.leaveFrom)
+		assert.equal("number", type(e.leftMs))
+		assert.is_nil(mock.lastError)
+	end)
+
+	it("logs a hover whose line is gone as a miss with the link that broke, not as a card", function()
+		ns.Card.enter(_G.ChatFrame1, "addon:WhatsAHanzi:00000000:3", nil, nil, 10, 2, 30, 14)
+		local h = ns.Card.hoverSummary()
+		assert.equal(0, ns.selftest.counters.cards or 0)
+		assert.equal(1, h.misses)
+		assert.equal("line: link not in the last 40 messages", h.last[1].why)
+	end)
+
 	it("escapes bars in companion text and strips colour codes from the sentence", function()
 		live.lines[line.hash].t = "a |cffff0000red|r bar | here"
 		local d = ns.Card.build(line, 3, live, {})
