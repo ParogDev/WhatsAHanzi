@@ -37,10 +37,13 @@ end
 
 -- Analyses one line. Returns a record { sender, text, tokens, pinyin, secret = bool } and feeds the UI,
 -- counters and vocabulary. Pure enough to unit test: UI calls go through ns.UI, which the mock stubs.
-function Chat.process(event, text, sender)
+function Chat.process(event, text, sender, channel)
 	local counters = ns.selftest.counters
 	counters.lines = counters.lines + 1
 	local who = shortName(sender)
+	if Chat.recentAdd then
+		Chat.recentAdd(event, text, sender, channel)
+	end
 	if isSecret(text) then
 		counters.secret = counters.secret + 1
 		if ns.UI then
@@ -63,8 +66,10 @@ function Chat.process(event, text, sender)
 	return rec
 end
 
-function Chat.onEvent(_, event, text, sender)
-	local ok, err = pcall(Chat.process, event, text, sender)
+-- The event's 9th payload value is channelBaseName ("General") for CHAT_MSG_CHANNEL.
+function Chat.onEvent(_, event, text, sender, ...)
+	local channel = event == "CHAT_MSG_CHANNEL" and select(7, ...) or nil
+	local ok, err = pcall(Chat.process, event, text, sender, channel)
 	if not ok then
 		ns.selftest.lastError = tostring(err)
 		geterrorhandler()(err)
@@ -205,11 +210,12 @@ end
 -- The same line reaches the filter once per chat frame that shows it: keep the last result. The known/new
 -- colour is baked into it, so the cache also keys on Vocab.version (bumped when a word changes state).
 local lastIn, lastOut, lastVersion
-function Chat.chatFilter(_, _, text, ...)
-	if ns.db and ns.db.ui.inChat == false then
+function Chat.chatFilter(frame, _, text, ...)
+	if isSecret(text) then
 		return false
 	end
-	if isSecret(text) then
+	Chat.recentNoteFrame(frame, text)
+	if ns.db and ns.db.ui.inChat == false then
 		return false
 	end
 	if text ~= lastIn or lastVersion ~= ns.Vocab.version then
@@ -564,6 +570,142 @@ function Chat.hookChatFrames()
 	end, Chat)
 	hook.hover = true
 	return hook
+end
+
+-- Recent Chinese lines (WhatsAHanziDB.recent), oldest first: { e = event, ch = channel name (CHAT_MSG_CHANNEL),
+-- s = sender, t = text, at = time(), f = chat frame id }. Two readers: the companion takes them from
+-- SavedVariables (the client writes WoWChatLog.txt late, see docs/companion-rs.md), and PLAYER_LOGIN prints them
+-- again after a /reload, which empties the chat window. Secret senders or texts are never stored.
+Chat.RECENT_MAX = 200
+Chat.RECENT_MAX_AGE = 6 * 3600
+local recentState = { buffered = 0, added = 0, restored = 0, skippedSecret = 0 }
+Chat.recentState = recentState
+local lastRecent -- the entry added last, for the filter to tell which chat frame shows it
+local filterSaw -- { t, f }: the filter ran before the event handler for this text
+
+local function recentOn()
+	return ns.db and ns.db.ui.recent ~= false
+end
+
+-- Drops entries older than RECENT_MAX_AGE (against `now`) and the oldest beyond RECENT_MAX. Returns the list.
+function Chat.recentPrune(list, now)
+	local keep = {}
+	for _, e in ipairs(list) do
+		if type(e) == "table" and type(e.at) == "number" and now - e.at <= Chat.RECENT_MAX_AGE then
+			keep[#keep + 1] = e
+		end
+	end
+	local drop = #keep - Chat.RECENT_MAX
+	if drop > 0 then
+		for _ = 1, drop do
+			table.remove(keep, 1)
+		end
+	end
+	return keep
+end
+
+-- Stores one Chinese chat line. Returns the entry, or nil and why not.
+function Chat.recentAdd(event, text, sender, channel)
+	if not recentOn() then
+		return nil, "recent off"
+	end
+	if type(event) ~= "string" or event:sub(1, 9) ~= "CHAT_MSG_" then
+		return nil, "not a chat event"
+	end
+	if isSecret(text) or isSecret(sender) or isSecret(channel) then
+		recentState.skippedSecret = recentState.skippedSecret + 1
+		return nil, "secret"
+	end
+	if type(text) ~= "string" or not ns.Han.hasHan(text) then
+		return nil, "no Han"
+	end
+	local list = ns.db.recent
+	if type(list) ~= "table" then
+		list = {}
+		ns.db.recent = list
+	end
+	local e = { e = event, s = sender, t = text, at = time() }
+	if event == "CHAT_MSG_CHANNEL" and type(channel) == "string" and channel ~= "" then
+		e.ch = channel
+	end
+	if filterSaw and filterSaw.t == text then
+		e.f = filterSaw.f
+	end
+	filterSaw = nil
+	list[#list + 1] = e
+	if #list > Chat.RECENT_MAX then
+		ns.db.recent = Chat.recentPrune(list, e.at)
+	end
+	lastRecent = e
+	recentState.added = recentState.added + 1
+	recentState.buffered = #ns.db.recent
+	return e
+end
+
+-- The chat filter's half: which chat frame shows the line (the filter runs once per frame; the first one wins).
+function Chat.recentNoteFrame(frame, text)
+	local id = frame and frame.GetID and frame:GetID()
+	if not id then
+		return
+	end
+	if lastRecent and lastRecent.t == text then
+		lastRecent.f = lastRecent.f or id
+	elseif not (filterSaw and filterSaw.t == text) then
+		filterSaw = { t = text, f = id }
+	end
+end
+
+Chat.RECENT_LABELS = {
+	CHAT_MSG_GUILD = "Guild",
+	CHAT_MSG_OFFICER = "Officer",
+	CHAT_MSG_PARTY = "Party",
+	CHAT_MSG_PARTY_LEADER = "Party",
+	CHAT_MSG_RAID = "Raid",
+	CHAT_MSG_RAID_LEADER = "Raid",
+	CHAT_MSG_INSTANCE_CHAT = "Instance",
+	CHAT_MSG_INSTANCE_CHAT_LEADER = "Instance",
+	CHAT_MSG_WHISPER = "From",
+	CHAT_MSG_WHISPER_INFORM = "To",
+	CHAT_MSG_EMOTE = "Emote",
+	CHAT_MSG_SAY = "Say",
+	CHAT_MSG_YELL = "Yell",
+}
+Chat.RESTORED_COLOR = { 0.6, 0.6, 0.6 }
+
+-- The restored line as printed: dimmed, "restored" and the original time, then the text with its hover links.
+function Chat.recentLine(e)
+	local label = e.ch or Chat.RECENT_LABELS[e.e] or "Chat"
+	local when = date("%H:%M", e.at)
+	return ("|cff808080[restored %s] [%s] %s:|r %s"):format(
+		when,
+		label,
+		shortName(e.s) or "?",
+		Chat.linkify(e.t) or e.t
+	)
+end
+
+-- PLAYER_LOGIN: print the lines kept from before this load into the frame each came from, once per load. Only
+-- AddMessage: nothing is sent, and linkify does not count words toward "known". Returns the number printed.
+function Chat.recentRestore()
+	if Chat.recentRestored then
+		return 0
+	end
+	Chat.recentRestored = true
+	local list = Chat.recentPrune(type(ns.db.recent) == "table" and ns.db.recent or {}, time())
+	ns.db.recent = list
+	recentState.buffered = #list
+	if not recentOn() then
+		return 0
+	end
+	local c = Chat.RESTORED_COLOR
+	for _, e in ipairs(list) do
+		local frame = (e.f and _G["ChatFrame" .. e.f]) or _G.ChatFrame1 or DEFAULT_CHAT_FRAME
+		if not isSecret(e.t) and type(e.t) == "string" then
+			frame:AddMessage(Chat.recentLine(e), c[1], c[2], c[3])
+			recentState.restored = recentState.restored + 1
+		end
+	end
+	return recentState.restored
 end
 
 -- Vocabulary log: every known word seen, with counts and who said it (SavedVariable, account-wide).

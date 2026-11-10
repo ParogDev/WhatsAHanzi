@@ -160,6 +160,14 @@ function Options.register()
 			.. "/chatlog by hand lasts one session only. Unticking stops it from the next login; /chatlog turns it off now."
 	)
 
+	local recent = addon("recent", ui, "Boolean", "Keep recent Chinese lines", true)
+	Settings.CreateCheckbox(
+		category,
+		recent,
+		"Keeps the last 200 Chinese chat lines (six hours) for the companion overlay, and prints them again, dimmed, "
+			.. "after a /reload empties the chat window. Lines in instances that the game hides from addons are not kept."
+	)
+
 	if layout and CreateSettingsListSectionHeaderInitializer then
 		layout:AddInitializer(CreateSettingsListSectionHeaderInitializer("Channels"))
 	end

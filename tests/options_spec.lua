@@ -11,7 +11,7 @@ describe("Options", function()
 		local cat = ns.Options.register()
 		assert.truthy(cat)
 		assert.equal(cat, _G.Settings.addonCategory)
-		assert.equal(7 + #ns.Chat.EVENTS, ns.selftest.options.settings)
+		assert.equal(8 + #ns.Chat.EVENTS, ns.selftest.options.settings)
 		assert.is_true(ns.db.ui.chatLog) -- the chat log is turned on at login unless the user says no
 		assert.is_false(ns.db.ui.hoverKeys) -- K/S on the card is opt-in
 		assert.is_true(ns.db.ui.speak) -- a held hover speaks the word

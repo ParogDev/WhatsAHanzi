@@ -24,8 +24,12 @@ local defaults = {
 		-- chatLog: turn the client's chat log (Logs\WoWChatLog.txt) on at login; the companion reads it.
 		-- /chatlog lasts one client session only, so without this the companion goes blind after a restart.
 		chatLog = true,
+		-- recent: keep the last Chinese chat lines (WhatsAHanziDB.recent) for the companion and print them again
+		-- after a /reload (Chat.recentRestore).
+		recent = true,
 	},
 	vocab = {},
+	recent = {},
 	selftest = {},
 }
 
@@ -140,6 +144,44 @@ function ns.ensureChatLogging()
 	return st
 end
 
+-- The client holds WoWChatLog.txt writes back for a long time (docs/companion-rs.md, "Chat log flushing"). Turning
+-- logging off and on again may close and reopen the file, which would write what it holds. Recorded in
+-- selftest.chatLogging.flush = { tries, last, why }; the companion's size log tells whether the file grew.
+function ns.flushChatLog(reason)
+	local st = selftest.chatLogging or {}
+	selftest.chatLogging = st
+	local f = st.flush or { tries = 0 }
+	st.flush = f
+	if not LoggingChat then
+		f.why = "LoggingChat missing"
+		return false
+	end
+	local okOn, on = pcall(isLoggingChat)
+	if not (okOn and on) then
+		f.why = "chat log off: nothing to flush"
+		return false
+	end
+	local ok, err = pcall(function()
+		LoggingChat(false)
+		LoggingChat(true)
+	end)
+	f.tries = f.tries + 1
+	f.last = date("%H:%M:%S")
+	f.reason = reason
+	if not ok then
+		f.why = "LoggingChat toggle: " .. tostring(err)
+		return false
+	end
+	local okAfter, after = pcall(isLoggingChat)
+	if not (okAfter and after) then
+		f.why = "toggle left the chat log off"
+		pcall(LoggingChat, true)
+		return false
+	end
+	f.why = nil
+	return true
+end
+
 function selftest.remember(rec)
 	local l = selftest.lastLines
 	l[#l + 1] = { sender = rec.sender, text = rec.text, pinyin = rec.pinyin }
@@ -229,6 +271,7 @@ function selftest.snapshot(phase)
 		cardPool = ns.Card and ns.Card.poolSummary() or nil,
 		options = selftest.options,
 		chatLogging = selftest.chatLogging,
+		recent = ns.Chat and ns.Chat.recentState or nil,
 		ui = { chatRect = rect },
 	}
 	ns.db.selftest = s
@@ -455,6 +498,17 @@ frame:SetScript("OnEvent", function(self, event, ...)
 		if not okMotd then
 			selftest.motdLink = { why = "hookMOTD: " .. tostring(errMotd) }
 			geterrorhandler()(errMotd)
+		end
+		local okRec, errRec = pcall(ns.Chat.recentRestore)
+		if not okRec then
+			ns.Chat.recentState.why = "recentRestore: " .. tostring(errRec)
+			geterrorhandler()(errRec)
+		end
+		-- One flush try 20 s after login, apart from the /reload itself, so the size log can tell them apart.
+		if C_Timer and C_Timer.After then
+			C_Timer.After(20, function()
+				pcall(ns.flushChatLog, "login+20s")
+			end)
 		end
 		selftest.snapshot("login")
 		SLASH_WHATSAHANZI1 = "/hanzi"
