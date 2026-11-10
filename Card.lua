@@ -837,6 +837,7 @@ function Card.enter(chatFrame, link, text, region, left, bottom, width, height)
 		hoverLog.misses = hoverLog.misses + 1
 		st.counters.cardMiss = (st.counters.cardMiss or 0) + 1
 		entry.why = "build: " .. tostring(why)
+		Card.ctx = nil -- no card for this hover: nothing for the keys or the sound to act on
 		return
 	end
 	st.counters.cards = (st.counters.cards or 0) + 1
@@ -860,7 +861,8 @@ function Card.enter(chatFrame, link, text, region, left, bottom, width, height)
 	showHighlight(ctx)
 	showKeys(true)
 	if ns.Sound then -- Sound.lua is a new TOC file: absent until a client restart
-		entry.speak = ns.Sound.speakHover(ctx, Card.reading(data), data.word)
+		local queued = ns.Sound.speakHover(ctx, Card.reading(data), data.word)
+		entry.speak = entry.speak or queued -- a timer that already ran wrote the outcome; keep it
 	else
 		entry.speak = "Sound.lua not loaded"
 	end
@@ -891,7 +893,9 @@ end
 -- end: it is counted and the card stays.
 function Card.leave(fromFrame)
 	local ctx = Card.ctx
-	if ctx and ctx.chatFrame and fromFrame and fromFrame ~= ctx.chatFrame then
+	-- Unless the card's own frame is gone from the screen (its tab hidden): then no leave of its own will come.
+	local ownGone = ctx and ctx.chatFrame and ctx.chatFrame.IsVisible and not ctx.chatFrame:IsVisible()
+	if ctx and ctx.chatFrame and fromFrame and fromFrame ~= ctx.chatFrame and not ownGone then
 		hoverLog.strayLeaves = hoverLog.strayLeaves + 1
 		hoverLog.lastStray = { from = frameName(fromFrame), open = frameName(ctx.chatFrame) }
 		return

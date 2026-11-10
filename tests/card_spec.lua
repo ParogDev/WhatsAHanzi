@@ -199,7 +199,8 @@ describe("Card", function()
 		assert.is_true(e.shown)
 		assert.is_true(e.open) -- C_Timer.After(0) runs at once in the mock
 		assert.is_true(e.visible)
-		assert.equal("string", type(e.speak)) -- "queued"/"spoken", or why not (the mock has no sound probe)
+		assert.equal("string", type(e.speak)) -- the outcome, or why not (the mock has no sound probe)
+		assert.not_equal("queued", e.speak) -- the mock's timer ran at once: its outcome is not overwritten
 		-- A leave from the General tab is not this hover's end.
 		mock.callbacks["ChatFrame.OnHyperlinkLeave"](_G.ChatFrame1)
 		assert.equal(1, h.strayLeaves)
@@ -211,6 +212,18 @@ describe("Card", function()
 		assert.equal("ChatFrame4", e.leaveFrom)
 		assert.equal("number", type(e.leftMs))
 		assert.is_nil(mock.lastError)
+	end)
+
+	it("closes the card on any leave once its own chat tab is hidden", function()
+		local social = CreateFrame("ScrollingMessageFrame", "ChatFrame4")
+		ns.Chat.hookChatFrames()
+		local link = "addon:WhatsAHanzi:" .. line.hash .. ":3"
+		mock.callbacks["ChatFrame.OnHyperlinkEnter"](social, link, "灰谷", CreateFrame("Frame"), 10, 2, 30, 14)
+		assert.truthy(ns.Card.ctx)
+		social:Hide()
+		mock.callbacks["ChatFrame.OnHyperlinkLeave"](_G.ChatFrame1)
+		assert.is_nil(ns.Card.ctx)
+		assert.equal(0, ns.Card.hoverSummary().strayLeaves)
 	end)
 
 	it("logs a hover whose line is gone as a miss with the link that broke, not as a card", function()
