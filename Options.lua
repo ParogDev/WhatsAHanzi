@@ -160,6 +160,36 @@ function Options.register()
 			.. "/chatlog by hand lasts one session only. Unticking stops it from the next login; /chatlog turns it off now."
 	)
 
+	local strip = addon("strip", ui, "Boolean", "Live lines to the companion", true)
+	Settings.CreateCheckbox(
+		category,
+		strip,
+		"Shows each new Chinese line as a thin dark strip of pixels along the bottom edge of the screen, which the "
+			.. "companion overlay reads to translate it at once (the game writes its chat log only every few minutes)."
+	)
+	strip:SetValueChangedCallback(function()
+		if ns.Strip then
+			ns.Strip.apply()
+		end
+	end)
+
+	local recent = addon("recent", ui, "Boolean", "Keep recent Chinese lines", true)
+	recent:SetValueChangedCallback(function()
+		-- off means nothing kept: the saved lines go too, so the companion stops reading them
+		if ns.db.ui.recent == false then
+			ns.db.recent = {}
+			if ns.Chat and ns.Chat.recentState then
+				ns.Chat.recentState.buffered = 0
+			end
+		end
+	end)
+	Settings.CreateCheckbox(
+		category,
+		recent,
+		"Keeps the last 200 Chinese chat lines (six hours) for the companion overlay, and prints them again, dimmed, "
+			.. "after a /reload empties the chat window. Lines in instances that the game hides from addons are not kept."
+	)
+
 	if layout and CreateSettingsListSectionHeaderInitializer then
 		layout:AddInitializer(CreateSettingsListSectionHeaderInitializer("Channels"))
 	end

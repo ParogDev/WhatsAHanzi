@@ -24,8 +24,14 @@ local defaults = {
 		-- chatLog: turn the client's chat log (Logs\WoWChatLog.txt) on at login; the companion reads it.
 		-- /chatlog lasts one client session only, so without this the companion goes blind after a restart.
 		chatLog = true,
+		-- strip: show each new Chinese line as a pixel strip at the bottom edge for the companion (UI.lua, Strip).
+		strip = true,
+		-- recent: keep the last Chinese chat lines (WhatsAHanziDB.recent) for the companion and print them again
+		-- after a /reload (Chat.recentRestore).
+		recent = true,
 	},
 	vocab = {},
+	recent = {},
 	selftest = {},
 }
 
@@ -229,6 +235,8 @@ function selftest.snapshot(phase)
 		cardPool = ns.Card and ns.Card.poolSummary() or nil,
 		options = selftest.options,
 		chatLogging = selftest.chatLogging,
+		recent = ns.Chat and ns.Chat.recentState or nil,
+		strip = ns.Strip and ns.Strip.state or nil,
 		ui = { chatRect = rect },
 	}
 	ns.db.selftest = s
@@ -455,6 +463,18 @@ frame:SetScript("OnEvent", function(self, event, ...)
 		if not okMotd then
 			selftest.motdLink = { why = "hookMOTD: " .. tostring(errMotd) }
 			geterrorhandler()(errMotd)
+		end
+		local okRec, errRec = pcall(ns.Chat.recentRestore)
+		if not okRec then
+			ns.Chat.recentState.why = "recentRestore: " .. tostring(errRec)
+			geterrorhandler()(errRec)
+		end
+		if ns.Strip then
+			local okStrip, errStrip = pcall(ns.Strip.start)
+			if not okStrip then
+				ns.Strip.state.why = "Strip.start: " .. tostring(errStrip)
+				geterrorhandler()(errStrip)
+			end
 		end
 		selftest.snapshot("login")
 		SLASH_WHATSAHANZI1 = "/hanzi"

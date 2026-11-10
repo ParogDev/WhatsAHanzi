@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Recent Chinese lines are kept (`WhatsAHanziDB.recent`: the last 200, six hours) and printed again, dimmed with a "restored" time, after a `/reload` empties the chat window. The companion reads them at every `/reload`, logout and exit. Setting: "Keep recent Chinese lines".
+- Each new Chinese line is also drawn as a thin dark strip of pixels along the bottom-left edge of the screen, which the companion overlay reads to translate it at once (the game writes its chat log only every few minutes or at exit). Nothing is sent anywhere. Lines the game hides from addons in instances are never drawn. Setting: "Live lines to the companion".
+
 - Word sounds: a hovered word the companion has recorded whole (`Data/SoundIndex.lua`, files in `Sounds/words/`) plays as one file, with the tone changes of real speech, instead of syllable by syllable. Words without a recording still play syllables. Both are built on your PC by the companion and are not in the release zip. A recording plays only when the card shows the reading it was made for, so a word with two readings (行 háng/xíng) never says the other one. `/hanzi speak` segments the text like chat and plays each word in turn. The selftest counts `wordSounds`, `wordMiss` and `wordReadingDiffers` beside `syllables`, and `soundIndex` says whether the index loaded. Needs a client restart once (new file in the TOC).
 - `/hanzi fake banter | yell | lfg` prints three invented Chinese lines into the chat window with hover links, to try the card when nobody is online. They do not count toward known words.
 - The selftest and `WhatsAHanziDB.ui.chatRect` record where the chat frame sits (position, size, scale, screen size), so the companion's overlay can dock beside it.
