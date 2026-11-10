@@ -44,6 +44,13 @@ function Chat.process(event, text, sender, channel)
 	if Chat.recentAdd then
 		Chat.recentAdd(event, text, sender, channel)
 	end
+	if ns.Strip then
+		-- a strip failure must not cost the line its analysis
+		local ok, err = pcall(ns.Strip.push, event, text, sender, channel)
+		if not ok then
+			ns.Strip.state.why = "Strip.push: " .. tostring(err)
+		end
+	end
 	if isSecret(text) then
 		counters.secret = counters.secret + 1
 		if ns.UI then
