@@ -90,35 +90,4 @@ describe("recent lines", function()
 		ns.db.recent = { { e = "CHAT_MSG_GUILD", s = "Testj", t = "你好", at = time() } }
 		assert.equal(0, ns.Chat.recentRestore())
 	end)
-
-	describe("flushing the chat log", function()
-		local logging, toggles
-		before_each(function()
-			logging, toggles = true, {}
-			_G.LoggingChat = function(on)
-				if on ~= nil then
-					toggles[#toggles + 1] = on
-					logging = on
-				end
-				return logging
-			end
-		end)
-		after_each(function()
-			_G.LoggingChat = nil
-		end)
-
-		it("turns logging off and on again and records the try", function()
-			assert.is_true(ns.flushChatLog("test"))
-			assert.same({ false, true }, toggles)
-			assert.equal(1, ns.selftest.chatLogging.flush.tries)
-			assert.is_nil(ns.selftest.chatLogging.flush.why)
-		end)
-
-		it("leaves a chat log that is off alone and says why", function()
-			logging = false
-			assert.is_false(ns.flushChatLog("test"))
-			assert.same({}, toggles)
-			assert.equal("chat log off: nothing to flush", ns.selftest.chatLogging.flush.why)
-		end)
-	end)
 end)

@@ -144,44 +144,6 @@ function ns.ensureChatLogging()
 	return st
 end
 
--- The client holds WoWChatLog.txt writes back for a long time (docs/companion-rs.md, "Chat log flushing"). Turning
--- logging off and on again may close and reopen the file, which would write what it holds. Recorded in
--- selftest.chatLogging.flush = { tries, last, why }; the companion's size log tells whether the file grew.
-function ns.flushChatLog(reason)
-	local st = selftest.chatLogging or {}
-	selftest.chatLogging = st
-	local f = st.flush or { tries = 0 }
-	st.flush = f
-	if not LoggingChat then
-		f.why = "LoggingChat missing"
-		return false
-	end
-	local okOn, on = pcall(isLoggingChat)
-	if not (okOn and on) then
-		f.why = "chat log off: nothing to flush"
-		return false
-	end
-	local ok, err = pcall(function()
-		LoggingChat(false)
-		LoggingChat(true)
-	end)
-	f.tries = f.tries + 1
-	f.last = date("%H:%M:%S")
-	f.reason = reason
-	if not ok then
-		f.why = "LoggingChat toggle: " .. tostring(err)
-		return false
-	end
-	local okAfter, after = pcall(isLoggingChat)
-	if not (okAfter and after) then
-		f.why = "toggle left the chat log off"
-		pcall(LoggingChat, true)
-		return false
-	end
-	f.why = nil
-	return true
-end
-
 function selftest.remember(rec)
 	local l = selftest.lastLines
 	l[#l + 1] = { sender = rec.sender, text = rec.text, pinyin = rec.pinyin }
@@ -503,12 +465,6 @@ frame:SetScript("OnEvent", function(self, event, ...)
 		if not okRec then
 			ns.Chat.recentState.why = "recentRestore: " .. tostring(errRec)
 			geterrorhandler()(errRec)
-		end
-		-- One flush try 20 s after login, apart from the /reload itself, so the size log can tell them apart.
-		if C_Timer and C_Timer.After then
-			C_Timer.After(20, function()
-				pcall(ns.flushChatLog, "login+20s")
-			end)
 		end
 		selftest.snapshot("login")
 		SLASH_WHATSAHANZI1 = "/hanzi"
