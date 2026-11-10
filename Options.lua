@@ -147,13 +147,17 @@ function Options.register()
 
 	local chatLog = addon("chatLog", ui, "Boolean", "Log chat for the companion", true)
 	chatLog:SetValueChangedCallback(function()
-		ns.ensureChatLogging()
+		-- ticking turns the log on now; unticking leaves this session's log as it is (/chatlog turns it off)
+		local ok, err = pcall(ns.ensureChatLogging)
+		if not ok then
+			ns.selftest.chatLogging = { why = "ensureChatLogging: " .. tostring(err) }
+		end
 	end)
 	Settings.CreateCheckbox(
 		category,
 		chatLog,
 		"Turns the game's chat log (Logs\\WoWChatLog.txt) on at every login, so the companion overlay sees chat. "
-			.. "/chatlog by hand lasts one session only."
+			.. "/chatlog by hand lasts one session only. Unticking stops it from the next login; /chatlog turns it off now."
 	)
 
 	if layout and CreateSettingsListSectionHeaderInitializer then
