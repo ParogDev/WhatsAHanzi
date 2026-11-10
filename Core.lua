@@ -21,6 +21,9 @@ local defaults = {
 		cardScale = 1,
 		hoverKeys = false, -- K/S on an open card; opt-in so the card never takes keys the user bound
 		speak = true, -- a held hover speaks the word from the syllable bank (Sound.lua)
+		-- chatLog: turn the client's chat log (Logs\WoWChatLog.txt) on at login; the companion reads it.
+		-- /chatlog lasts one client session only, so without this the companion goes blind after a restart.
+		chatLog = true,
 	},
 	vocab = {},
 	selftest = {},
@@ -87,6 +90,55 @@ local selftest = {
 	lastLines = {},
 }
 ns.selftest = selftest
+
+-- Whether the client logs chat now: C_ChatInfo.IsLoggingChat, else LoggingChat() with no argument (both in Forever).
+local function isLoggingChat()
+	if C_ChatInfo and C_ChatInfo.IsLoggingChat then
+		return C_ChatInfo.IsLoggingChat()
+	end
+	if LoggingChat then
+		return LoggingChat()
+	end
+	return nil
+end
+
+-- Turn the chat log on at login when the chatLog setting allows (the companion follows Logs\WoWChatLog.txt).
+-- Returns selftest.chatLogging: { setting, before, on, turnedOn, why }. `why` names the broken link.
+function ns.ensureChatLogging()
+	local st = { setting = ns.db.ui.chatLog ~= false }
+	selftest.chatLogging = st
+	if not LoggingChat then
+		st.why = "LoggingChat missing: the companion gets no chat (type /chatlog)"
+		return st
+	end
+	local okBefore, before = pcall(isLoggingChat)
+	if okBefore then
+		st.before = before
+	end
+	if not st.setting then
+		st.on = st.before
+		if not st.before then
+			st.why = "chatLog setting off: the companion gets no chat"
+		end
+		return st
+	end
+	if st.before then
+		st.on = true
+		return st
+	end
+	local ok, err = pcall(LoggingChat, true)
+	if not ok then
+		st.why = "LoggingChat(true): " .. tostring(err)
+		return st
+	end
+	local okAfter, after = pcall(isLoggingChat)
+	st.on = okAfter and after or false
+	st.turnedOn = st.on
+	if not st.on then
+		st.why = "LoggingChat(true) left the chat log off"
+	end
+	return st
+end
 
 function selftest.remember(rec)
 	local l = selftest.lastLines
@@ -176,6 +228,7 @@ function selftest.snapshot(phase)
 		cardLineMiss = selftest.cardLineMiss,
 		cardPool = ns.Card and ns.Card.poolSummary() or nil,
 		options = selftest.options,
+		chatLogging = selftest.chatLogging,
 		ui = { chatRect = rect },
 	}
 	ns.db.selftest = s
@@ -362,6 +415,11 @@ frame:SetScript("OnEvent", function(self, event, ...)
 		self:UnregisterEvent("ADDON_LOADED")
 	elseif event == "PLAYER_LOGIN" then
 		selftest.loadedAt = date("%Y-%m-%d %H:%M:%S")
+		local okLog, errLog = pcall(ns.ensureChatLogging)
+		if not okLog then
+			selftest.chatLogging = { why = "ensureChatLogging: " .. tostring(errLog) }
+			geterrorhandler()(errLog)
+		end
 		ns.Font.detect()
 		ns.Font.chatCJK()
 		if ns.Sound then
