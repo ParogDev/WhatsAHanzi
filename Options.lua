@@ -145,6 +145,17 @@ function Options.register()
 		"A word held under the mouse for a moment is read aloud, one syllable at a time, on the Master channel."
 	)
 
+	local chatLog = addon("chatLog", ui, "Boolean", "Log chat for the companion", true)
+	chatLog:SetValueChangedCallback(function()
+		ns.ensureChatLogging()
+	end)
+	Settings.CreateCheckbox(
+		category,
+		chatLog,
+		"Turns the game's chat log (Logs\\WoWChatLog.txt) on at every login, so the companion overlay sees chat. "
+			.. "/chatlog by hand lasts one session only."
+	)
+
 	if layout and CreateSettingsListSectionHeaderInitializer then
 		layout:AddInitializer(CreateSettingsListSectionHeaderInitializer("Channels"))
 	end

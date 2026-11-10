@@ -123,4 +123,67 @@ describe("Core and Chat", function()
 		local said = _G.DEFAULT_CHAT_FRAME._messages
 		assert.truthy(said[#said]:find("banter | lfg | yell", 1, true))
 	end)
+
+	describe("chat logging at login", function()
+		local logging, calls
+		before_each(function()
+			logging, calls = false, 0
+			_G.LoggingChat = function(on)
+				if on ~= nil then
+					calls = calls + 1
+					logging = on
+				end
+				return logging
+			end
+			_G.C_ChatInfo = {
+				IsLoggingChat = function()
+					return logging
+				end,
+			}
+			ns.initDB({})
+		end)
+		after_each(function()
+			_G.LoggingChat, _G.C_ChatInfo = nil, nil
+		end)
+
+		it("turns the chat log on when it is off and says so", function()
+			local st = ns.ensureChatLogging()
+			assert.is_true(logging)
+			assert.same({ setting = true, before = false, on = true, turnedOn = true }, st)
+			assert.equal(st, ns.selftest.chatLogging)
+			assert.equal(st, ns.selftest.snapshot("test").chatLogging)
+		end)
+
+		it("leaves a running chat log alone", function()
+			logging = true
+			local st = ns.ensureChatLogging()
+			assert.equal(0, calls)
+			assert.same({ setting = true, before = true, on = true }, st)
+		end)
+
+		it("does nothing with the setting off, and names why the companion is blind", function()
+			ns.db.ui.chatLog = false
+			local st = ns.ensureChatLogging()
+			assert.equal(0, calls)
+			assert.is_false(st.on)
+			assert.truthy(st.why:find("setting off", 1, true))
+		end)
+
+		it("names the broken link when the call fails or does nothing", function()
+			_G.LoggingChat = function(on)
+				if on then
+					error("blocked")
+				end
+				return false
+			end
+			assert.truthy(ns.ensureChatLogging().why:find("LoggingChat(true): ", 1, true))
+			_G.LoggingChat = function()
+				return false
+			end
+			_G.C_ChatInfo.IsLoggingChat = _G.LoggingChat
+			assert.equal("LoggingChat(true) left the chat log off", ns.ensureChatLogging().why)
+			_G.LoggingChat = nil
+			assert.truthy(ns.ensureChatLogging().why:find("LoggingChat missing", 1, true))
+		end)
+	end)
 end)
