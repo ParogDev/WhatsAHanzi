@@ -1,6 +1,8 @@
 # Changelog
 
-## Unreleased
+## 0.1.0 (2026-11-10)
+
+First release. Version 0.1.0 because nothing earlier named one: the addon is usable but young.
 
 - Recent Chinese lines are kept (`WhatsAHanziDB.recent`: the last 200, six hours) and printed again, dimmed with a "restored" time, after a `/reload` empties the chat window. The companion reads them at every `/reload`, logout and exit. Setting: "Keep recent Chinese lines".
 - Each new Chinese line is also drawn as a thin dark strip of pixels along the bottom-left edge of the screen, which the companion overlay reads to translate it at once (the game writes its chat log only every few minutes or at exit). Nothing is sent anywhere. Lines the game hides from addons in instances are never drawn. Setting: "Live lines to the companion".
