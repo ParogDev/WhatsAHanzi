@@ -36,6 +36,73 @@ describe("Core and Chat", function()
 		assert.same({ generatedAt = "2026-11-07 21:00:00", model = "haiku", lines = 3 }, ns.selftest.liveSummary())
 	end)
 
+	describe("companion heartbeat", function()
+		local now = 1762545600
+
+		it("says nothing when there is no companion file", function()
+			local st = ns.companionState(nil, now)
+			assert.equal("absent", st.state)
+			assert.is_nil(ns.companionNotice(st))
+		end)
+
+		it("cannot tell from a file without a heartbeat and names why", function()
+			local st = ns.companionState({ lines = {} }, now)
+			assert.equal("unknown", st.state)
+			assert.truthy(st.why:find("no heartbeat"))
+			assert.is_nil(ns.companionNotice(st))
+		end)
+
+		it("counts a fresh heartbeat as running, a clock a little ahead too", function()
+			assert.equal("running", ns.companionState({ heartbeat = now - 59, heartbeatEvery = 60 }, now).state)
+			assert.equal("running", ns.companionState({ heartbeat = now + 5, heartbeatEvery = 60 }, now).state)
+			assert.equal("running", ns.companionState({ heartbeat = now - 180, heartbeatEvery = 60 }, now).state)
+		end)
+
+		it("flags three missed beats as stopped, with a chat notice", function()
+			local st = ns.companionState({ heartbeat = now - 720, heartbeatEvery = 60 }, now)
+			assert.equal("stopped", st.state)
+			assert.equal(720, st.age)
+			assert.truthy(st.why:find("12 min ago"))
+			local notice = ns.companionNotice(st)
+			assert.truthy(notice:find("Companion not running"))
+			assert.truthy(notice:find("12 min ago"))
+		end)
+
+		it("falls back to a 60 s beat when heartbeatEvery is absurd", function()
+			for _, every in ipairs({ 1e9, 0 / 0, 1, -5, "x" }) do
+				local st = ns.companionState({ heartbeat = now - 720, heartbeatEvery = every }, now)
+				assert.equal("stopped", st.state)
+				assert.equal(180, st.limit)
+			end
+		end)
+
+		it("calls a heartbeat far in the future unknown and names the clock", function()
+			local st = ns.companionState({ heartbeat = now + 3600, heartbeatEvery = 60 }, now)
+			assert.equal("unknown", st.state)
+			assert.truthy(st.why:find("clock"))
+			assert.is_nil(ns.companionNotice(st))
+		end)
+
+		it("scales the limit with the beat and never goes below three minutes", function()
+			assert.equal(600, ns.companionState({ heartbeat = now, heartbeatEvery = 200 }, now).limit)
+			assert.equal(180, ns.companionState({ heartbeat = now, heartbeatEvery = 5 }, now).limit)
+			assert.equal(180, ns.companionState({ heartbeat = now }, now).limit)
+		end)
+
+		it("formats ages in the largest whole unit", function()
+			assert.equal("45 s", ns.ageText(45))
+			assert.equal("12 min", ns.ageText(720))
+			assert.equal("3 h", ns.ageText(3 * 3600 + 59))
+			assert.equal("2 d", ns.ageText(2 * 86400))
+			assert.equal("0 s", ns.ageText(-4))
+		end)
+
+		it("puts the state in the selftest snapshot", function()
+			ns.selftest.companion = ns.companionState({ heartbeat = now - 720 }, now)
+			assert.equal("stopped", ns.selftest.snapshot("test").companion.state)
+		end)
+	end)
+
 	it("ignores lines without Chinese", function()
 		assert.is_nil(ns.Chat.process("CHAT_MSG_GUILD", "gg wp", "Bob-Realm"))
 		assert.equal(1, ns.selftest.counters.lines)

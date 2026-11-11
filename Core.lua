@@ -164,7 +164,72 @@ function selftest.liveSummary()
 	for _ in pairs(live.lines or {}) do
 		n = n + 1
 	end
-	return { generatedAt = live.generatedAt, model = live.model, lines = n }
+	return { generatedAt = live.generatedAt, model = live.model, lines = n, heartbeat = live.heartbeat }
+end
+
+-- "45 s", "12 min", "3 h", "2 d".
+function ns.ageText(s)
+	s = math.max(0, math.floor(s))
+	if s < 120 then
+		return s .. " s"
+	elseif s < 7200 then
+		return math.floor(s / 60) .. " min"
+	elseif s < 172800 then
+		return math.floor(s / 3600) .. " h"
+	end
+	return math.floor(s / 86400) .. " d"
+end
+
+-- Whether the companion was running when this /reload read Data/Local.lua. The companion rewrites the file at least
+-- every `heartbeatEvery` seconds and stamps `heartbeat` (epoch seconds), so a stamp older than three beats means it
+-- stopped: a quiet chat no longer looks the same as a dead companion. The stamp says the companion process is up,
+-- not that translating works (a refused API key still beats). The addon cannot hear from the companion between
+-- reloads (nothing reaches a running client but the files it reads at load), so this is checked at load.
+-- { state = "absent" | "unknown" | "running" | "stopped", age, limit, why }; `why` names the link.
+ns.COMPANION_MISSED_BEATS = 3
+function ns.companionState(live, now)
+	if type(live) ~= "table" then
+		return { state = "absent", why = "Data/Local.lua absent or empty: no companion on this PC, or it never wrote" }
+	end
+	local beat = tonumber(live.heartbeat)
+	if not beat then
+		return { state = "unknown", why = "Data/Local.lua has no heartbeat (written by a companion before wah 0.9.0)" }
+	end
+	local every = tonumber(live.heartbeatEvery)
+	if not every or every ~= every or every < 30 or every > 600 then
+		every = 60 -- absent, NaN or out of range: a huge beat would never trip the limit
+	end
+	local limit = math.max(every * ns.COMPANION_MISSED_BEATS, 180)
+	local age = now - beat
+	if age < -60 then
+		return {
+			state = "unknown",
+			age = age,
+			why = ("heartbeat is %s in the future: the PC clock was set back"):format(ns.ageText(-age)),
+		}
+	end
+	if age > limit then
+		return {
+			state = "stopped",
+			age = age,
+			limit = limit,
+			why = ("Data/Local.lua last written %s ago (the companion rewrites it every %d s): not running"):format(
+				ns.ageText(age),
+				every
+			),
+		}
+	end
+	return { state = "running", age = age, limit = limit }
+end
+
+-- The chat notice for a stopped companion, or nil when there is nothing to say.
+function ns.companionNotice(st)
+	if st.state ~= "stopped" then
+		return nil
+	end
+	return ("|cffff6060Companion not running:|r wah last checked in %s ago, so new Chinese lines get no translation. Start it again (wah watch), then /reload to check."):format(
+		ns.ageText(st.age)
+	)
 end
 
 -- Where ChatFrame1 sits, for the companion's overlay to dock against: UI units (origin bottom-left), the frame's
@@ -225,6 +290,7 @@ function selftest.snapshot(phase)
 		gameTerms = ns.Dict.gameCount() or "Data/Game.lua not loaded (restart the client)",
 		pinyinChars = ns.Pinyin.count(),
 		live = selftest.liveSummary(),
+		companion = selftest.companion,
 		lastLines = selftest.lastLines,
 		lastError = selftest.lastError,
 		chatHook = selftest.chatHook,
@@ -318,6 +384,15 @@ local function onSlash(input)
 			print("/hanzi chat on | off (now " .. (ns.db.ui.inChat == false and "off" or "on") .. ")")
 		end
 	elseif cmd == "status" then
+		local comp = selftest.companion
+		if comp then
+			print(
+				"companion at the last /reload: "
+					.. comp.state
+					.. (comp.why and (": " .. comp.why) or "")
+					.. (comp.state == "stopped" and "; start it again (wah watch), then /reload" or "")
+			)
+		end
 		local c = selftest.counters
 		local path, name = ns.Font.current()
 		local accepted = {}
@@ -413,6 +488,7 @@ ns.frame = frame
 frame:RegisterEvent("ADDON_LOADED")
 frame:RegisterEvent("PLAYER_LOGIN")
 frame:RegisterEvent("PLAYER_LOGOUT")
+frame:RegisterEvent("PLAYER_ENTERING_WORLD")
 frame:RegisterEvent("GUILD_MOTD")
 frame:SetScript("OnEvent", function(self, event, ...)
 	if event == "ADDON_LOADED" then
@@ -476,6 +552,8 @@ frame:SetScript("OnEvent", function(self, event, ...)
 				geterrorhandler()(errStrip)
 			end
 		end
+		local okComp, comp = pcall(ns.companionState, ns.Data and ns.Data.live, time())
+		selftest.companion = okComp and comp or { state = "error", why = "companionState: " .. tostring(comp) }
 		selftest.snapshot("login")
 		SLASH_WHATSAHANZI1 = "/hanzi"
 		SLASH_WHATSAHANZI2 = "/wah"
@@ -483,6 +561,22 @@ frame:SetScript("OnEvent", function(self, event, ...)
 		print(
 			"loaded. Hover a Chinese word in chat; /hanzi options (K/S keys on the card are off until you turn them on), /hanzi test 你好."
 		)
+	elseif event == "PLAYER_ENTERING_WORLD" then
+		-- The notice only on a /reload: at a cold start Local.lua still holds the last session's stamp until the
+		-- watcher's first write (about 5 s after Wow.exe), so a login would cry wolf almost every time.
+		local _, isReloadingUi = ...
+		self:UnregisterEvent("PLAYER_ENTERING_WORLD")
+		local comp = selftest.companion
+		if comp then
+			comp.noticeSkipped = not isReloadingUi
+					and comp.state == "stopped"
+					and "cold login: wah may not have written yet"
+				or nil
+		end
+		local notice = comp and isReloadingUi and ns.companionNotice(comp)
+		if notice then
+			print(notice)
+		end
 	elseif event == "PLAYER_LOGOUT" then
 		selftest.snapshot("logout")
 	elseif event == "GUILD_MOTD" then

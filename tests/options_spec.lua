@@ -57,6 +57,8 @@ describe("Options", function()
 		assert.truthy(s:find("2026-11-07 21:00:00", 1, true))
 		assert.truthy(s:find("haiku"))
 		assert.truthy(s:find("2 translated"))
+		ns.selftest.companion = { state = "stopped", why = "last written 12 min ago" }
+		assert.truthy(ns.Options.companionStatus():find("Not running at the last /reload", 1, true))
 	end)
 
 	it("names the broken link when the Settings API is missing", function()

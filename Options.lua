@@ -71,11 +71,18 @@ function Options.companionStatus()
 	for _ in pairs(live.lines or {}) do
 		n = n + 1
 	end
-	return ("Last written %s\nModel %s\n%d translated lines"):format(
+	local text = ("Last written %s\nModel %s\n%d translated lines"):format(
 		tostring(live.generatedAt or "?"),
 		tostring(live.model or "?"),
 		n
 	)
+	local comp = ns.selftest and ns.selftest.companion
+	if comp and comp.state == "stopped" then
+		text = text .. "\n|cffff6060Not running at the last /reload:|r " .. comp.why
+	elseif comp and comp.state == "running" then
+		text = text .. "\nRunning at the last /reload"
+	end
+	return text
 end
 
 -- Registers the category once; records in selftest.options what took.
