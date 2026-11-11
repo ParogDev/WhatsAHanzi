@@ -64,8 +64,23 @@ describe("Core and Chat", function()
 			assert.equal(720, st.age)
 			assert.truthy(st.why:find("12 min ago"))
 			local notice = ns.companionNotice(st)
-			assert.truthy(notice:find("Translator not running"))
+			assert.truthy(notice:find("Companion not running"))
 			assert.truthy(notice:find("12 min ago"))
+		end)
+
+		it("falls back to a 60 s beat when heartbeatEvery is absurd", function()
+			for _, every in ipairs({ 1e9, 0 / 0, 1, -5, "x" }) do
+				local st = ns.companionState({ heartbeat = now - 720, heartbeatEvery = every }, now)
+				assert.equal("stopped", st.state)
+				assert.equal(180, st.limit)
+			end
+		end)
+
+		it("calls a heartbeat far in the future unknown and names the clock", function()
+			local st = ns.companionState({ heartbeat = now + 3600, heartbeatEvery = 60 }, now)
+			assert.equal("unknown", st.state)
+			assert.truthy(st.why:find("clock"))
+			assert.is_nil(ns.companionNotice(st))
 		end)
 
 		it("scales the limit with the beat and never goes below three minutes", function()
