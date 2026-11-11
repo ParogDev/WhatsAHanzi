@@ -6,11 +6,15 @@
 --                   context the model saw, m = model alias, at = unix time of the translation.
 --   terms[<word>]   { english, kind }: game names (zones, factions, classes) shown as a tag on the card.
 --   patterns[<key>] a note shown when a token of the hovered line equals the key.
+--   heartbeat       unix time of this write; the companion rewrites the file at least every heartbeatEvery seconds,
+--                   so a /reload that finds it more than three beats old says the translator is not running.
 local _, ns = ...
 ns.Data = ns.Data or {}
 ns.Data.live = {
 	generatedAt = "2026-11-07 21:00:00",
 	model = "haiku",
+	heartbeat = 1762567200,
+	heartbeatEvery = 60,
 	lines = {
 		["3043a59c"] = {
 			t = "I got blasted by an Alliance hunter in Ashenvale",
