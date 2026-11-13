@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- **The pixel strip is removed.** 0.1.0 drew each new Chinese chat line as a thin strip of dark pixels at the bottom-left of the screen so the companion program could read it with a screen capture. That is the same technique pixel bots use to pass game data to outside programs, and it should never have shipped. It only ever carried chat text, never combat or unit data, and nothing read it back into the game, but it is gone now along with its setting ("Live lines to the companion"). The companion gets chat from the game's own chat log and, at each `/reload`, from the addon's saved recent lines.
+
 - A stopped companion is reported in chat after a `/reload`: "Companion not running", with how long ago it last wrote `Data/Local.lua`. The companion (wah 0.9.0 and later) rewrites that file at least once a minute with a `heartbeat` time, so a file more than three minutes old means it is not running, where before a quiet chat and a dead companion looked the same. `/hanzi status`, the Companion settings page and `selftest.companion` show the same state, also after a fresh login, where the chat line stays quiet because the companion starts a few seconds after the game. The addon still hears from the companion only when the game loads its files, so the check runs at each `/reload`, not in between. A running companion is not proof that translating works (a refused API key still beats).
 
 ## 0.1.0 (2026-11-10)

@@ -24,8 +24,6 @@ local defaults = {
 		-- chatLog: turn the client's chat log (Logs\WoWChatLog.txt) on at login; the companion reads it.
 		-- /chatlog lasts one client session only, so without this the companion goes blind after a restart.
 		chatLog = true,
-		-- strip: show each new Chinese line as a pixel strip at the bottom edge for the companion (UI.lua, Strip).
-		strip = true,
 		-- recent: keep the last Chinese chat lines (WhatsAHanziDB.recent) for the companion and print them again
 		-- after a /reload (Chat.recentRestore).
 		recent = true,
@@ -75,6 +73,13 @@ function ns.initDB(saved)
 			migrations[v](saved)
 		end
 		saved.dbVersion = v
+	end
+	-- the pixel strip was removed (0.1.1): its setting and selftest section go with it
+	if type(saved.ui) == "table" then
+		saved.ui.strip = nil
+	end
+	if type(saved.selftest) == "table" then
+		saved.selftest.strip = nil
 	end
 	copyDefaults(saved, defaults)
 	ns.db = saved
@@ -302,7 +307,6 @@ function selftest.snapshot(phase)
 		options = selftest.options,
 		chatLogging = selftest.chatLogging,
 		recent = ns.Chat and ns.Chat.recentState or nil,
-		strip = ns.Strip and ns.Strip.state or nil,
 		ui = { chatRect = rect },
 	}
 	ns.db.selftest = s
@@ -544,13 +548,6 @@ frame:SetScript("OnEvent", function(self, event, ...)
 		if not okRec then
 			ns.Chat.recentState.why = "recentRestore: " .. tostring(errRec)
 			geterrorhandler()(errRec)
-		end
-		if ns.Strip then
-			local okStrip, errStrip = pcall(ns.Strip.start)
-			if not okStrip then
-				ns.Strip.state.why = "Strip.start: " .. tostring(errStrip)
-				geterrorhandler()(errStrip)
-			end
 		end
 		local okComp, comp = pcall(ns.companionState, ns.Data and ns.Data.live, time())
 		selftest.companion = okComp and comp or { state = "error", why = "companionState: " .. tostring(comp) }

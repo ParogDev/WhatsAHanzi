@@ -30,6 +30,13 @@ describe("Core and Chat", function()
 		assert.equal(1, db.ui.cardScale)
 	end)
 
+	it("drops the removed pixel strip's setting and selftest section", function()
+		local db = ns.initDB({ ui = { strip = true }, selftest = { strip = { sent = 3 } } })
+		assert.is_nil(db.ui.strip)
+		assert.is_nil(db.selftest.strip)
+		assert.is_nil(ns.Strip)
+	end)
+
 	it("summarises the companion's file in the selftest", function()
 		assert.is_nil(ns.selftest.liveSummary())
 		ns.Data.live = { generatedAt = "2026-11-07 21:00:00", model = "haiku", lines = { a = {}, b = {}, c = {} } }
