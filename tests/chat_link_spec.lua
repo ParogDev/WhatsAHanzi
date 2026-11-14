@@ -248,6 +248,36 @@ describe("Chat window links", function()
 		assert.truthy(why:find("not in the last 40"))
 	end)
 
+	it("finds a recent line behind more than 40 lines of history", function()
+		local empty, whyEmpty = ns.Chat.lineForLink(_G.ChatFrame1, "addon:WhatsAHanzi:00000000:1", "你好")
+		assert.is_nil(empty)
+		assert.equal("chat frame has no messages", whyEmpty)
+		local out, line = ns.Chat.linkify("你好 gg 怒焰")
+		-- An older line carrying the same link, with a different body: the walk must reach the newer one first.
+		_G.ChatFrame1:AddMessage("[Guild] [Ann]: " .. out .. " older copy")
+		for n = 1, 55 do
+			_G.ChatFrame1:AddMessage("[Guild] [Ann]: old line " .. n)
+		end
+		_G.ChatFrame1:AddMessage("[Guild] [Bob]: " .. out)
+		for n = 1, 3 do -- the target is not the newest line
+			_G.ChatFrame1:AddMessage("[Guild] [Ann]: later line " .. n)
+		end
+		assert.equal(60, _G.ChatFrame1:GetNumMessages())
+		ns.Chat.lines.clear()
+		local got, index = ns.Chat.lineForLink(_G.ChatFrame1, "addon:WhatsAHanzi:" .. line.hash .. ":3", "怒焰")
+		assert.is_table(got)
+		assert.equal("你好 gg 怒焰", got.body)
+		assert.equal("怒焰", got.tokens[index].word)
+		-- The search is bounded: a line 41 or more messages back is out of reach.
+		for n = 1, 40 do
+			_G.ChatFrame1:AddMessage("[Guild] [Ann]: newer line " .. n)
+		end
+		ns.Chat.lines.clear()
+		local none, why = ns.Chat.lineForLink(_G.ChatFrame1, "addon:WhatsAHanzi:" .. line.hash .. ":3", "怒焰")
+		assert.is_nil(none)
+		assert.truthy(why:find("not in the last 40"))
+	end)
+
 	it("finds the hovered occurrence of a repeated word in a rebuilt line", function()
 		-- An item link with a Chinese name sits between them: the rebuilt body segments its text as well.
 		local out, line = ns.Chat.linkify("你好 |Hitem:1|h[你好]|h 你好 gg 你好")
