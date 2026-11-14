@@ -594,20 +594,31 @@ end
 -- or nil with the link that broke. The rebuilt body has no escapes, so it is cached under the link's hash
 -- only for this session's hovers; nothing is written for the companion.
 function Chat.lineForLink(chatFrame, link, word)
-	if not (chatFrame and chatFrame.GetMessageInfo) then
-		return nil, "chatFrame.GetMessageInfo missing"
+	if not chatFrame then
+		return nil, "no chat frame"
+	end
+	for _, method in ipairs({ "GetMessageInfo", "GetNumMessages" }) do
+		if not chatFrame[method] then
+			return nil, "chatFrame." .. method .. " missing"
+		end
+	end
+	-- GetMessageInfo(1) is the OLDEST line, GetMessageInfo(GetNumMessages()) the newest
+	-- (ScrollingMessageFrame.lua): walk down from the newest, at most 40 lines.
+	local newest = chatFrame:GetNumMessages()
+	if isSecret(newest) then
+		return nil, "GetNumMessages returned a secret value"
+	end
+	if type(newest) ~= "number" then
+		return nil, "GetNumMessages returned " .. type(newest)
+	end
+	if newest == 0 then
+		return nil, "chat frame has no messages"
 	end
 	local hash, linkIndex = Chat.tokenFromLink(link)
 	if isSecret(word) then
 		word = nil
 	end
-	if not chatFrame.GetNumMessages then
-		return nil, "chatFrame.GetNumMessages missing"
-	end
 	local needle = "|H" .. link .. "|h"
-	-- GetMessageInfo(1) is the OLDEST line, GetMessageInfo(GetNumMessages()) the newest
-	-- (ScrollingMessageFrame.lua): walk down from the newest, at most 40 lines.
-	local newest = chatFrame:GetNumMessages()
 	for i = newest, math.max(1, newest - 39), -1 do
 		local msg = chatFrame:GetMessageInfo(i)
 		if msg ~= nil and not isSecret(msg) and msg:find(needle, 1, true) then
@@ -632,7 +643,7 @@ function Chat.lineForLink(chatFrame, link, word)
 			return line, index
 		end
 	end
-	return nil, "link not in the last 40 messages"
+	return nil, ("link not in the last 40 messages (of %d)"):format(newest)
 end
 
 -- Hooks the chat window: the filter per event and the hover callbacks. Records in selftest.chatHook what
