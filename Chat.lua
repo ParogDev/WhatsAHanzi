@@ -601,13 +601,16 @@ function Chat.lineForLink(chatFrame, link, word)
 	if isSecret(word) then
 		word = nil
 	end
+	if not chatFrame.GetNumMessages then
+		return nil, "chatFrame.GetNumMessages missing"
+	end
 	local needle = "|H" .. link .. "|h"
-	for i = 1, 40 do
+	-- GetMessageInfo(1) is the OLDEST line, GetMessageInfo(GetNumMessages()) the newest
+	-- (ScrollingMessageFrame.lua): walk down from the newest, at most 40 lines.
+	local newest = chatFrame:GetNumMessages()
+	for i = newest, math.max(1, newest - 39), -1 do
 		local msg = chatFrame:GetMessageInfo(i)
-		if msg == nil then
-			break
-		end
-		if not isSecret(msg) and msg:find(needle, 1, true) then
+		if msg ~= nil and not isSecret(msg) and msg:find(needle, 1, true) then
 			local body = Chat.messageBody(Chat.plainText(msg))
 			local tokens = ns.Dict.segment(body)
 			-- The rebuilt body has no escapes, so the link's index may point at another token, or at another

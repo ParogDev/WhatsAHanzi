@@ -193,8 +193,13 @@ local function newFrame(_, name)
 	function f:GetEffectiveScale()
 		return 1
 	end
+	-- Blizzard's order (ScrollingMessageFrame.lua): GetMessageInfo(1) is the OLDEST line,
+	-- GetMessageInfo(GetNumMessages()) the newest.
+	function f:GetNumMessages()
+		return #self._messages
+	end
 	function f:GetMessageInfo(i)
-		return self._messages[#self._messages + 1 - i]
+		return self._messages[i]
 	end
 	return f
 end

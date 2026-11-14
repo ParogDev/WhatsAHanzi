@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- **Hovering a word after a `/reload` works in a busy chat.** For a line from before the last `/reload`, the hover card looks the line up in the chat window, but it read the window's 40 oldest lines instead of its 40 newest. With more than 40 lines of history, hovering a recent word showed no card. It now reads from the newest line back.
+
 - **No more "WhatsAHanzi tried to call the protected function UNKNOWN()" after login.** The guild Message of the Day link retried 3, 10 and 30 seconds after login by asking the game for the MOTD (`C_GuildInfo.GetMOTD`), which Forever restricts, so BugSack logged it three times per session. The addon now takes the MOTD only from what the game hands over: the `GUILD_MOTD` event, the chat window printing it, or the MOTD line already in the chat history. After a `/reload` whose chat window no longer shows the MOTD, it stays unlinked until the next MOTD change or login. A cleared MOTD is no longer brought back from the chat history. `selftest.motdLink` records where the text came from (`source`) or why there is no link (`why`).
 
 - **The pixel strip is removed.** 0.1.0 drew each new Chinese chat line as a thin strip of dark pixels at the bottom-left of the screen so the companion program could read it with a screen capture. That is the same technique pixel bots use to pass game data to outside programs, and it should never have shipped. It only ever carried chat text, never combat or unit data, and nothing read it back into the game, but it is gone now along with its setting ("Live lines to the companion"). The companion gets chat from the game's own chat log and, at each `/reload`, from the addon's saved recent lines.
