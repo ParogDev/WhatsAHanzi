@@ -1,8 +1,18 @@
 local mock = require("tests.wow_mock")
 
--- A chat frame with a history buffer and the ScrollingMessageFrame TransformMessages contract.
+-- A chat frame with a history buffer and the ScrollingMessageFrame contract: TransformMessages, and
+-- GetMessageInfo(1) the OLDEST line, GetMessageInfo(GetNumMessages()) the newest (ScrollingMessageFrame.lua).
 local function chatFrame(lines)
 	local f = { lines = lines }
+	function f:GetNumMessages()
+		return #self.lines
+	end
+	function f:GetMessageInfo(i)
+		local l = self.lines[i]
+		if l then
+			return l[1], l[2]
+		end
+	end
 	function f:TransformMessages(predicate, transform)
 		for i, l in ipairs(self.lines) do
 			if predicate(l[1], l[2]) then
@@ -46,43 +56,63 @@ describe("MOTD links", function()
 		assert.same({ nil, "chat frame has no TransformMessages" }, { ns.Chat.relinkMOTD({}, "今晚") })
 	end)
 
-	it("hooks DisplayGMOTD and relinks the line each frame already shows", function()
+	-- C_GuildInfo.GetMOTD is HasRestrictions on Forever: an addon call logs ADDON_ACTION_BLOCKED. Every
+	-- MOTD test runs with a GetMOTD that fails the test when called.
+	local function forbidGetMOTD()
+		_G.C_GuildInfo = {
+			GetMOTD = function()
+				error("C_GuildInfo.GetMOTD called (restricted on Forever)")
+			end,
+		}
+	end
+
+	it("reads the MOTD body back from a printed line", function()
+		local tpl = "Guild Message of the Day: %s"
+		assert.equal("今晚开组", ns.Chat.motdFromLine("Guild Message of the Day: 今晚开组", tpl))
+		assert.is_nil(ns.Chat.motdFromLine("Guild Message of the Day: ", tpl))
+		assert.is_nil(ns.Chat.motdFromLine("[Guild] someone: 今晚开组", tpl))
+		-- a line linked before a /reload gives back its plain body
+		assert.equal("今晚", ns.Chat.motdFromLine("Guild Message of the Day: |Hwah:1|h今晚|h", tpl))
+		assert.is_nil(ns.Chat.motdFromLine(nil, tpl))
+		assert.equal("x 今晚", ns.Chat.motdFromLine("<<x 今晚>>", "<<%s>>"))
+		assert.is_nil(ns.Chat.motdFromLine("<<x 今晚", "<<%s>>"))
+		local secret = "Guild Message of the Day: 今晚开组"
+		mock.secret[secret] = true
+		assert.is_nil(ns.Chat.motdFromLine(secret, tpl))
+		mock.secret[secret] = nil
+	end)
+
+	it("hooks DisplayGMOTD and relinks the line each frame already shows, without GetMOTD", function()
 		local hooked
 		_G.hooksecurefunc = function(tbl, name, fn)
 			hooked = { tbl = tbl, name = name, fn = fn }
 		end
 		_G.ChatFrameUtil.DisplayGMOTD = function() end
-		_G.C_GuildInfo = {
-			GetMOTD = function()
-				return "今晚开组"
-			end,
-		}
+		forbidGetMOTD()
 		_G.ChatFrame1 = chatFrame({ { "Guild Message of the Day: 今晚开组", 1 } })
 		local st = ns.Chat.hookMOTD()
 		assert.is_true(st.hooked)
 		assert.equal(1, st.relinked)
+		assert.equal("chat line", st.source)
 		assert.equal("DisplayGMOTD", hooked.name)
 		local f2 = chatFrame({ { "Guild Message of the Day: 明天休息", 1 } })
 		hooked.fn(f2, "明天休息")
 		assert.equal(2, st.relinked)
+		assert.equal("DisplayGMOTD", st.source)
 		assert.truthy(f2.lines[1][1]:find("|H", 1, true))
-		assert.is_nil(st.printed) -- the 30 s retry found the line linked: no second copy
+		assert.equal(ns.Hash.fnv1a32("明天休息"), ns.db.motd.hash)
+		assert.is_nil(st.printed)
 		_G.ChatFrame1 = nil
 	end)
 
-	it("after a /reload, retries until the MOTD loads and prints one linked line", function()
+	it("after a /reload, the retries never call GetMOTD and print nothing they did not see", function()
 		local timers = {}
 		_G.C_Timer.After = function(d, fn)
 			timers[#timers + 1] = { d = d, fn = fn }
 		end
 		_G.hooksecurefunc = function() end
 		_G.ChatFrameUtil.DisplayGMOTD = function() end
-		local motd = ""
-		_G.C_GuildInfo = {
-			GetMOTD = function()
-				return motd
-			end,
-		}
+		forbidGetMOTD()
 		local f = chatFrame({ { "some other line", 1 } })
 		function f:IsEventRegistered(ev)
 			return ev == "GUILD_MOTD"
@@ -92,19 +122,133 @@ describe("MOTD links", function()
 		end
 		_G.ChatFrame1 = f
 		local st = ns.Chat.hookMOTD()
-		assert.equal("motd not loaded yet (empty)", st.why)
-		motd = "今晚开组" -- guild data arrives
+		assert.truthy(st.why:find("not seen yet", 1, true))
 		for _, t in ipairs(timers) do
 			t.fn()
 		end
 		assert.equal(3, st.tries)
+		assert.is_nil(st.printed)
+		assert.equal(1, #f.lines)
+		assert.truthy(st.why:find("GetMOTD is restricted", 1, true))
+		_G.ChatFrame1 = nil
+	end)
+
+	it("a late retry relinks the line the client printed after login", function()
+		local timers = {}
+		_G.C_Timer.After = function(d, fn)
+			timers[#timers + 1] = { d = d, fn = fn }
+		end
+		_G.hooksecurefunc = function() end
+		_G.ChatFrameUtil.DisplayGMOTD = function() end
+		forbidGetMOTD()
+		local f = chatFrame({ { "some other line", 1 } })
+		_G.ChatFrame1 = f
+		local st = ns.Chat.hookMOTD()
+		f.lines[2] = { "Guild Message of the Day: 今晚开组", 1 } -- printed by a path we did not hook
+		timers[1].fn()
+		assert.equal(1, st.relinked)
+		assert.truthy(f.lines[2][1]:find("|H", 1, true))
+		assert.equal(ns.Hash.fnv1a32("今晚开组"), ns.db.motd.hash)
+		assert.is_nil(st.why)
+		_G.ChatFrame1 = nil
+	end)
+
+	it("reads the newest MOTD in a frame's history", function()
+		_G.ChatFrame1 = chatFrame({
+			{ "Guild Message of the Day: 旧的", 1 },
+			{ "other", 1 },
+			{ "Guild Message of the Day: 新的", 1 },
+			{ "later line", 1 },
+		})
+		assert.equal("新的", ns.Chat.motdFromFrames())
+		_G.ChatFrame1 = nil
+		assert.is_nil(ns.Chat.motdFromFrames())
+	end)
+
+	it("a GUILD_MOTD before PLAYER_LOGIN is linked and printed by the 30 s retry", function()
+		local timers = {}
+		_G.C_Timer.After = function(d, fn)
+			timers[#timers + 1] = { d = d, fn = fn }
+		end
+		_G.hooksecurefunc = function() end
+		_G.ChatFrameUtil.DisplayGMOTD = function() end
+		forbidGetMOTD()
+		ns.Chat.onMOTDEvent("今晚开组") -- before hookMOTD: no state yet
+		assert.equal(0, #timers)
+		local f = chatFrame({ { "some other line", 1 } })
+		function f:IsEventRegistered()
+			return false -- no frame takes guild lines
+		end
+		function f:AddMessage(msg, r)
+			self.lines[#self.lines + 1] = { msg, r }
+		end
+		_G.ChatFrame1 = f
+		_G.DEFAULT_CHAT_FRAME = f
+		local st = ns.Chat.hookMOTD()
+		assert.equal("GUILD_MOTD", st.source)
+		for _, t in ipairs(timers) do
+			t.fn()
+		end
 		assert.equal(1, st.printed)
 		assert.equal(2, #f.lines)
 		assert.truthy(f.lines[2][1]:find("|H", 1, true))
-		assert.equal(ns.Hash.fnv1a32("今晚开组"), ns.db.motd.hash)
-		ns.Chat.relinkAllMOTD(nil, true) -- another late try: still one copy
+		_G.ChatFrame1, _G.DEFAULT_CHAT_FRAME = nil, nil
+	end)
+
+	it("a cleared MOTD is not brought back from the chat history", function()
+		local timers = {}
+		_G.C_Timer.After = function(d, fn)
+			timers[#timers + 1] = { d = d, fn = fn }
+		end
+		_G.hooksecurefunc = function() end
+		_G.ChatFrameUtil.DisplayGMOTD = function() end
+		forbidGetMOTD()
+		local f = chatFrame({ { "some other line", 1 } })
+		_G.ChatFrame1 = f
+		local st = ns.Chat.hookMOTD()
+		ns.Chat.onMOTDEvent("今晚开组")
+		local seen = ns.db.motd.seen
+		ns.Chat.onMOTDEvent("") -- an officer cleared it
+		f.lines[2] = { "Guild Message of the Day: 今晚开组", 1 } -- the old line still in history
+		for i = 1, 3 do
+			timers[i].fn()
+		end
+		assert.is_true(st.cleared)
+		assert.equal(0, st.relinked)
+		assert.equal("Guild Message of the Day: 今晚开组", f.lines[2][1])
+		assert.equal(seen, ns.db.motd.seen)
+		assert.truthy(st.why:find("cleared", 1, true))
+		_G.ChatFrame1 = nil
+	end)
+
+	it("GUILD_MOTD prints one linked line when no frame shows it", function()
+		local timers = {}
+		_G.C_Timer.After = function(d, fn)
+			timers[#timers + 1] = { d = d, fn = fn }
+		end
+		_G.hooksecurefunc = function() end
+		_G.ChatFrameUtil.DisplayGMOTD = function() end
+		forbidGetMOTD()
+		local f = chatFrame({ { "some other line", 1 } })
+		function f:IsEventRegistered(ev)
+			return ev == "GUILD_MOTD"
+		end
+		function f:AddMessage(msg, r)
+			self.lines[#self.lines + 1] = { msg, r }
+		end
+		_G.ChatFrame1 = f
+		local st = ns.Chat.hookMOTD()
+		ns.Chat.onMOTDEvent("今晚开组")
+		timers[#timers].fn() -- the one-frame wait of the event
+		assert.equal(1, st.printed)
 		assert.equal(2, #f.lines)
-		ns.Chat.onMOTDEvent("今晚开组") -- the event for the same MOTD: still one copy
+		assert.truthy(f.lines[2][1]:find("|H", 1, true))
+		assert.equal("GUILD_MOTD", st.source)
+		for i = 1, 3 do
+			timers[i].fn() -- the 3/10/30 s retries: still one copy
+		end
+		ns.Chat.onMOTDEvent("今晚开组")
+		timers[#timers].fn()
 		assert.equal(2, #f.lines)
 		assert.is_nil(st.why)
 		_G.ChatFrame1 = nil
