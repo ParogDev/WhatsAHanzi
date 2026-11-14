@@ -1,8 +1,18 @@
 local mock = require("tests.wow_mock")
 
--- A chat frame with a history buffer and the ScrollingMessageFrame TransformMessages contract.
+-- A chat frame with a history buffer and the ScrollingMessageFrame contract: TransformMessages, and
+-- GetMessageInfo(1) the OLDEST line, GetMessageInfo(GetNumMessages()) the newest (ScrollingMessageFrame.lua).
 local function chatFrame(lines)
 	local f = { lines = lines }
+	function f:GetNumMessages()
+		return #self.lines
+	end
+	function f:GetMessageInfo(i)
+		local l = self.lines[i]
+		if l then
+			return l[1], l[2]
+		end
+	end
 	function f:TransformMessages(predicate, transform)
 		for i, l in ipairs(self.lines) do
 			if predicate(l[1], l[2]) then
@@ -61,7 +71,8 @@ describe("MOTD links", function()
 		assert.equal("今晚开组", ns.Chat.motdFromLine("Guild Message of the Day: 今晚开组", tpl))
 		assert.is_nil(ns.Chat.motdFromLine("Guild Message of the Day: ", tpl))
 		assert.is_nil(ns.Chat.motdFromLine("[Guild] someone: 今晚开组", tpl))
-		assert.is_nil(ns.Chat.motdFromLine("Guild Message of the Day: |Hwah:1|h今晚|h", tpl))
+		-- a line linked before a /reload gives back its plain body
+		assert.equal("今晚", ns.Chat.motdFromLine("Guild Message of the Day: |Hwah:1|h今晚|h", tpl))
 		assert.is_nil(ns.Chat.motdFromLine(nil, tpl))
 		assert.equal("x 今晚", ns.Chat.motdFromLine("<<x 今晚>>", "<<%s>>"))
 		assert.is_nil(ns.Chat.motdFromLine("<<x 今晚", "<<%s>>"))
@@ -139,6 +150,74 @@ describe("MOTD links", function()
 		assert.truthy(f.lines[2][1]:find("|H", 1, true))
 		assert.equal(ns.Hash.fnv1a32("今晚开组"), ns.db.motd.hash)
 		assert.is_nil(st.why)
+		_G.ChatFrame1 = nil
+	end)
+
+	it("reads the newest MOTD in a frame's history", function()
+		_G.ChatFrame1 = chatFrame({
+			{ "Guild Message of the Day: 旧的", 1 },
+			{ "other", 1 },
+			{ "Guild Message of the Day: 新的", 1 },
+			{ "later line", 1 },
+		})
+		assert.equal("新的", ns.Chat.motdFromFrames())
+		_G.ChatFrame1 = nil
+		assert.is_nil(ns.Chat.motdFromFrames())
+	end)
+
+	it("a GUILD_MOTD before PLAYER_LOGIN is linked and printed by the 30 s retry", function()
+		local timers = {}
+		_G.C_Timer.After = function(d, fn)
+			timers[#timers + 1] = { d = d, fn = fn }
+		end
+		_G.hooksecurefunc = function() end
+		_G.ChatFrameUtil.DisplayGMOTD = function() end
+		forbidGetMOTD()
+		ns.Chat.onMOTDEvent("今晚开组") -- before hookMOTD: no state yet
+		assert.equal(0, #timers)
+		local f = chatFrame({ { "some other line", 1 } })
+		function f:IsEventRegistered()
+			return false -- no frame takes guild lines
+		end
+		function f:AddMessage(msg, r)
+			self.lines[#self.lines + 1] = { msg, r }
+		end
+		_G.ChatFrame1 = f
+		_G.DEFAULT_CHAT_FRAME = f
+		local st = ns.Chat.hookMOTD()
+		assert.equal("GUILD_MOTD", st.source)
+		for _, t in ipairs(timers) do
+			t.fn()
+		end
+		assert.equal(1, st.printed)
+		assert.equal(2, #f.lines)
+		assert.truthy(f.lines[2][1]:find("|H", 1, true))
+		_G.ChatFrame1, _G.DEFAULT_CHAT_FRAME = nil, nil
+	end)
+
+	it("a cleared MOTD is not brought back from the chat history", function()
+		local timers = {}
+		_G.C_Timer.After = function(d, fn)
+			timers[#timers + 1] = { d = d, fn = fn }
+		end
+		_G.hooksecurefunc = function() end
+		_G.ChatFrameUtil.DisplayGMOTD = function() end
+		forbidGetMOTD()
+		local f = chatFrame({ { "some other line", 1 } })
+		_G.ChatFrame1 = f
+		local st = ns.Chat.hookMOTD()
+		ns.Chat.onMOTDEvent("今晚开组")
+		local seen = ns.db.motd.seen
+		ns.Chat.onMOTDEvent("") -- an officer cleared it
+		f.lines[2] = { "Guild Message of the Day: 今晚开组", 1 } -- the old line still in history
+		for i = 1, 3 do
+			timers[i].fn()
+		end
+		assert.is_true(st.cleared)
+		assert.equal(0, st.relinked)
+		assert.equal("Guild Message of the Day: 今晚开组", f.lines[2][1])
+		assert.equal(seen, ns.db.motd.seen)
+		assert.truthy(st.why:find("cleared", 1, true))
 		_G.ChatFrame1 = nil
 	end)
 

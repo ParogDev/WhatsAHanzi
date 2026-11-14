@@ -538,7 +538,6 @@ frame:SetScript("OnEvent", function(self, event, ...)
 				print("|cffff6060" .. hookErr .. "|r; showing the pane instead.")
 			end
 		end
-		ns.Chat.rememberMOTD()
 		local okMotd, errMotd = pcall(ns.Chat.hookMOTD)
 		if not okMotd then
 			selftest.motdLink = { why = "hookMOTD: " .. tostring(errMotd) }

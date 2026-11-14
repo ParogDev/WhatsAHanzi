@@ -245,6 +245,11 @@ function Chat.rememberMOTD(text)
 	if not ns.Han.hasHan(text) then
 		return nil, "motd has no Han"
 	end
+	local old = ns.db.motd
+	if old and old.text == text then
+		old.seen = time() -- the same MOTD again (one DisplayGMOTD per chat frame): no rehash
+		return old
+	end
 	local rec = { text = text, hash = ns.Hash.fnv1a32(text), seen = time() }
 	ns.db.motd = rec
 	return rec
@@ -335,34 +340,38 @@ function Chat.motdFromLine(message, template)
 	if #tail > 0 and message:sub(-#tail) ~= tail then
 		return nil
 	end
-	local body = message:sub(#head + 1, #message - #tail)
-	if body:find("|H", 1, true) then
-		return nil -- already linked by us: not the plain MOTD
+	-- A line this addon linked already (kept over a /reload) gives back its plain body.
+	local body = Chat.plainText(message:sub(#head + 1, #message - #tail))
+	if body == nil or body == "" then
+		return nil
 	end
 	return body
 end
 
--- The MOTD a chat frame already printed (login, or history kept over a /reload), read without
--- changing anything. The last printed one wins. Nil when no frame shows it.
+-- The newest MOTD a chat frame printed (login, or history kept over a /reload), read without changing
+-- anything. GetMessageInfo(GetNumMessages()) is the newest line (ScrollingMessageFrame.lua), so each
+-- frame is read newest first; the first frame that shows a MOTD answers. Nil when none does.
 function Chat.motdFromFrames()
-	local found
 	for _, f in ipairs(chatFrames()) do
-		if f.TransformMessages then
-			f:TransformMessages(function(message)
-				found = Chat.motdFromLine(message) or found
-				return false
-			end, function(...)
-				return ...
-			end)
+		if f.GetNumMessages and f.GetMessageInfo then
+			for i = f:GetNumMessages(), 1, -1 do
+				local body = Chat.motdFromLine((f:GetMessageInfo(i)))
+				if body then
+					return body
+				end
+			end
 		end
 	end
-	return found
+	return nil
 end
 
 -- The MOTD this session knows from Blizzard's side: the event payload or the hook argument (kept in
--- motdState.text), else the printed chat line. Nil and why when none of them has it.
+-- motdState.text), else the printed chat line. Returns the text, or nil and why not.
 local function knownMOTD()
 	local st = motdState or {}
+	if st.cleared then
+		return nil, "motd cleared (GUILD_MOTD with no text)"
+	end
 	if st.text and not Chat.motdUnusable(st.text) then
 		return st.text
 	end
@@ -371,8 +380,11 @@ local function knownMOTD()
 		st.text, st.source = fromFrames, "chat line"
 		return fromFrames
 	end
-	return nil
+	return nil, "motd not seen yet (no GUILD_MOTD event, no printed line; GetMOTD is restricted)"
 end
+
+-- GUILD_MOTD can fire before PLAYER_LOGIN runs hookMOTD: its text waits here.
+local pendingMOTD
 
 -- Relinks the MOTD line in every chat frame. With print = true and no frame showing it, adds one linked
 -- MOTD line to the frames that show guild MOTDs, once per MOTD text. gmotd nil means "the one this
@@ -381,9 +393,10 @@ end
 function Chat.relinkAllMOTD(gmotd, print)
 	local st = motdState or {}
 	if gmotd == nil then
-		gmotd = knownMOTD()
+		local whyNone
+		gmotd, whyNone = knownMOTD()
 		if gmotd == nil then
-			st.why = "motd not seen yet (no GUILD_MOTD event, no printed line; GetMOTD is restricted)"
+			st.why = whyNone
 			return 0
 		end
 	end
@@ -429,21 +442,30 @@ function Chat.relinkAllMOTD(gmotd, print)
 end
 
 -- Post-hooks DisplayGMOTD for MOTDs printed from now on, relinks what the frames show already, and retries
--- while the MOTD line has not appeared (3, 10 and 30 s after login). The MOTD text comes only from
--- Blizzard's side: the hook argument, the GUILD_MOTD event (Core calls Chat.onMOTDEvent) or the printed
--- line. A /reload whose chat history lost the line and that gets no GUILD_MOTD leaves it unlinked, with
--- the reason in selftest.motdLink.why. Records selftest.motdLink.
+-- while the MOTD line has not appeared (3, 10 and 30 s after login; the last try prints a linked line when
+-- the MOTD came from the event or the hook and no frame shows it). The MOTD text comes only from Blizzard's
+-- side: the hook argument, the GUILD_MOTD event (Core calls Chat.onMOTDEvent) or the printed line. A /reload
+-- whose chat history lost the line and that gets no GUILD_MOTD leaves it unlinked, with the reason in
+-- selftest.motdLink.why. Records selftest.motdLink.
 function Chat.hookMOTD()
 	motdState = { relinked = 0, tries = 0 }
 	local st = motdState
 	ns.selftest.motdLink = st
+	if pendingMOTD ~= nil then
+		if Chat.motdUnusable(pendingMOTD) then
+			st.cleared = pendingMOTD == ""
+		else
+			st.text, st.source = pendingMOTD, "GUILD_MOTD"
+		end
+		pendingMOTD = nil
+	end
 	if not (ChatFrameUtil and ChatFrameUtil.DisplayGMOTD and hooksecurefunc) then
 		st.why = "ChatFrameUtil.DisplayGMOTD missing: MOTD not linked"
 		return st
 	end
 	hooksecurefunc(ChatFrameUtil, "DisplayGMOTD", function(chatFrame, gmotd)
 		if not Chat.motdUnusable(gmotd) then
-			st.text, st.source = gmotd, "DisplayGMOTD"
+			st.text, st.source, st.cleared = gmotd, "DisplayGMOTD", nil
 			Chat.rememberMOTD(gmotd)
 		end
 		local n, why = Chat.relinkMOTD(chatFrame, gmotd)
@@ -460,7 +482,7 @@ function Chat.hookMOTD()
 				if gmotd then
 					Chat.rememberMOTD(gmotd)
 				end
-				Chat.relinkAllMOTD(gmotd, false)
+				Chat.relinkAllMOTD(gmotd, delay == 30)
 			end)
 		end
 	end
@@ -468,10 +490,23 @@ function Chat.hookMOTD()
 end
 
 -- GUILD_MOTD (a new MOTD, or the login one): the chat frames print it in their own handler, which may run
--- after ours, so the relink waits a frame.
+-- after ours, so the relink waits a frame. An empty MOTD (cleared by an officer) stops the retries from
+-- bringing the old one back from the chat history. Before PLAYER_LOGIN the text waits in pendingMOTD.
 function Chat.onMOTDEvent(gmotd)
-	if motdState and not Chat.motdUnusable(gmotd) then
-		motdState.text, motdState.source = gmotd, "GUILD_MOTD"
+	if not motdState then
+		if gmotd == "" or not Chat.motdUnusable(gmotd) then
+			pendingMOTD = gmotd
+		end
+		Chat.rememberMOTD(gmotd)
+		return
+	end
+	if gmotd == "" then
+		motdState.text, motdState.source, motdState.cleared = nil, "GUILD_MOTD", true
+		motdState.why = "motd cleared (GUILD_MOTD with no text)"
+		return
+	end
+	if not Chat.motdUnusable(gmotd) then
+		motdState.text, motdState.source, motdState.cleared = gmotd, "GUILD_MOTD", nil
 	end
 	Chat.rememberMOTD(gmotd)
 	if motdState and C_Timer and C_Timer.After then

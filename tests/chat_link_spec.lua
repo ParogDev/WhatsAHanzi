@@ -174,7 +174,11 @@ describe("Chat window links", function()
 	it("remembers a Chinese MOTD for the companion", function()
 		assert.is_nil(ns.Chat.rememberMOTD("Welcome to the guild"))
 		assert.is_nil(ns.db.motd)
-		mock.motd = "欢迎 all" -- what GetMOTD would say: never asked (restricted on Forever)
+		_G.C_GuildInfo = {
+			GetMOTD = function()
+				error("C_GuildInfo.GetMOTD called (restricted on Forever)")
+			end,
+		}
 		assert.same({ nil, "motd absent or secret" }, { ns.Chat.rememberMOTD() })
 		local rec = ns.Chat.rememberMOTD("欢迎 all")
 		assert.equal("欢迎 all", rec.text)
